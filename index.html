@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AppTraining</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0d0f1a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="AppTraining">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0d0f1a; color: #e8eaf0; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+  .loader { text-align: center; padding: 32px; }
+  .loader p { font-size: 14px; color: #555e7a; margin-top: 12px; }
+</style>
+</head>
+<body>
+<div class="loader">
+  <div style="font-size:48px;">💪</div>
+  <p>Chargement…</p>
+</div>
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js');
+  }
+  // Redirection vers l'app GAS (temporaire pendant la migration)
+  window.location.href = 'https://script.google.com/macros/s/AKfycbwQiM6ixf-CTIWwcuNHoosFbvrDzWmC056yRUGhTaWv0Nwxbm0dLeK3d5QVgqmS7P9G7A/exec';
+</script>
+</body>
+</html>
