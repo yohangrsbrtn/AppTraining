@@ -138,6 +138,8 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 <script src="bilan.js"></script>
 <script src="training.js"></script>
 <script src="diete.js"></script>
+<script src="mensurations.js"></script>
+<script src="recettes.js"></script>
 <script>
 // ── État global ───────────────────────────────────────────────────────
 const S = {
@@ -171,6 +173,10 @@ function render() {
     case 'diete-loading': document.body.innerHTML = renderDietePage();
       if (_dSubPage === 'detail') initDieteSliders((_dDetail && _dDetail.repas || []).length);
       break;
+    case 'mensurations':
+    case 'mens-loading':  document.body.innerHTML = renderMensurationsPage(); break;
+    case 'recettes':
+    case 'recettes-loading': document.body.innerHTML = renderRecettesPage(); break;
     case 'classement':    app.innerHTML = renderClassement(); break;
     case 'profil':        app.innerHTML = renderProfil();  break;
   }
@@ -385,11 +391,12 @@ function renderHeader(title, sub, showBack) {
 
 function renderNavBar(active) {
   const items = [
-    { id:'home',       icon:'🏠', label:'Accueil'   },
-    { id:'training',   icon:'🏋️', label:'Programme' },
-    { id:'bilan',      icon:'📊', label:'Bilan'     },
-    { id:'diete',      icon:'🥗', label:'Diète'     },
-    { id:'classement', icon:'🏆', label:'Classement'},
+    { id:'home',         icon:'🏠', label:'Accueil'   },
+    { id:'training',     icon:'🏋️', label:'Programme' },
+    { id:'bilan',        icon:'📊', label:'Bilan'     },
+    { id:'diete',        icon:'🥗', label:'Diète'     },
+    { id:'mensurations', icon:'📏', label:'Mensu.'    },
+    { id:'recettes',     icon:'🍽️', label:'Recettes'  },
   ];
   return `<nav class="navbar">${items.map(it => `
     <button class="nav-item${it.id===active?' active':''}" onclick="goTo('${it.id}')">
@@ -405,7 +412,9 @@ function goTo(page) {
   if (page === 'home')        loadHome();
   else if (page === 'bilan')    loadBilan();
   else if (page === 'training') loadTraining();
-  else if (page === 'diete')    loadDiete();
+  else if (page === 'diete')         loadDiete();
+  else if (page === 'mensurations')  loadMensurations();
+  else if (page === 'recettes')      loadRecettes();
   else if (page === 'classement') loadClassement();
   else setPage(page);
 }
