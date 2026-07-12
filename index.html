@@ -117,12 +117,20 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .btn-blue { background:linear-gradient(135deg,#378ADD,#1a5ba0);color:#fff;border:none;border-radius:var(--radius);font-size:14px;font-weight:600;padding:14px;cursor:pointer; }
 .btn-green { background:linear-gradient(135deg,#1D9E75,#167a5a);color:#fff;border:none;border-radius:var(--radius);font-size:14px;font-weight:600;padding:14px;cursor:pointer; }
 .btn-disabled { background:#2d3142;color:var(--text);border:none;border-radius:var(--radius);font-size:14px;font-weight:600;padding:14px;opacity:.55;cursor:not-allowed; }
+
+/* ── Training ── */
+.t-select { width:100%;padding:10px;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit; }
+.set-row { display:flex;align-items:center;gap:6px;margin-bottom:6px; }
+.set-num { font-size:12px;font-weight:700;color:var(--muted);width:24px;flex-shrink:0;text-align:center; }
+.set-input { flex:1;padding:8px 4px;background:#0f1117;color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px;text-align:center;min-width:0; }
+.chrono-btn { background:#1e2444;border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;font-weight:600;padding:6px 10px;cursor:pointer;white-space:nowrap;flex-shrink:0; }
 </style>
 </head>
 <body>
 <div id="app"></div>
 <script src="api.js"></script>
 <script src="bilan.js"></script>
+<script src="training.js"></script>
 <script>
 // ── État global ───────────────────────────────────────────────────────
 const S = {
@@ -148,7 +156,8 @@ function render() {
     case 'loading':       app.innerHTML = renderSpinner(); break;
     case 'login':         app.innerHTML = renderLogin();   bindLogin(); break;
     case 'home':          app.innerHTML = renderHome();    break;
-    case 'training':      app.innerHTML = renderTraining(); break;
+    case 'training':
+    case 'training-loading': document.body.innerHTML = _tSubPage === 'seance' || S.page === 'training-loading' ? renderTrainingPage() : renderTrainingPage(); break;
     case 'bilan':
     case 'bilan-loading': document.body.innerHTML = renderBilanPage(); break;
     case 'classement':    app.innerHTML = renderClassement(); break;
@@ -285,20 +294,6 @@ function renderHome() {
   </div>`;
 }
 
-// ── Training (placeholder) ────────────────────────────────────────────
-function renderTraining() {
-  return `
-  <div id="app">
-    ${renderHeader('Programme', '', false)}
-    <div class="page">
-      <div class="empty">
-        <div class="empty-icon">🏋️</div>
-        <div class="empty-text">Programme en cours de migration…</div>
-      </div>
-    </div>
-    ${renderNavBar('training')}
-  </div>`;
-}
 
 
 // ── Classement ────────────────────────────────────────────────────────
@@ -397,7 +392,8 @@ function bindNav() {}
 
 function goTo(page) {
   if (page === 'home')        loadHome();
-  else if (page === 'bilan')  loadBilan();
+  else if (page === 'bilan')    loadBilan();
+  else if (page === 'training') loadTraining();
   else if (page === 'classement') loadClassement();
   else setPage(page);
 }
