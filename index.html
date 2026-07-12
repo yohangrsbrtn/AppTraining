@@ -104,11 +104,25 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .empty { text-align:center; padding:48px 16px; color:var(--muted); }
 .empty-icon { font-size:48px; margin-bottom:12px; }
 .empty-text { font-size:14px; }
+
+/* ── Bilan ── */
+.section-title { font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:20px 0 8px; }
+.field-label { font-size:11px;color:var(--muted);margin-bottom:3px;font-weight:600;letter-spacing:.5px; }
+.bilan-input { width:100%;padding:8px;background:#0f1117;color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px;font-family:inherit; }
+.bilan-input[readonly] { opacity:.6; }
+.bilan-textarea { width:100%;padding:10px;background:#0f1117;color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px;font-family:inherit;resize:vertical;min-height:70px; }
+.bilan-textarea[readonly] { opacity:.6; }
+.bilan-banner { font-size:12px;color:var(--muted);text-align:center;margin-bottom:12px;padding:8px 12px;background:#1e2235;border-radius:8px; }
+.btn-secondary { width:100%;background:#2d3142;color:var(--text);border:none;border-radius:var(--radius);font-size:14px;font-weight:600;padding:12px;cursor:pointer;margin-bottom:4px; }
+.btn-blue { background:linear-gradient(135deg,#378ADD,#1a5ba0);color:#fff;border:none;border-radius:var(--radius);font-size:14px;font-weight:600;padding:14px;cursor:pointer; }
+.btn-green { background:linear-gradient(135deg,#1D9E75,#167a5a);color:#fff;border:none;border-radius:var(--radius);font-size:14px;font-weight:600;padding:14px;cursor:pointer; }
+.btn-disabled { background:#2d3142;color:var(--text);border:none;border-radius:var(--radius);font-size:14px;font-weight:600;padding:14px;opacity:.55;cursor:not-allowed; }
 </style>
 </head>
 <body>
 <div id="app"></div>
 <script src="api.js"></script>
+<script src="bilan.js"></script>
 <script>
 // ── État global ───────────────────────────────────────────────────────
 const S = {
@@ -118,19 +132,27 @@ const S = {
   data: {}
 };
 
-function setPage(name) { S.page = name; render(); }
+function setPage(name) {
+  S.page = name;
+  // Pour les pages bilan, document.body peut avoir été remplacé — on s'assure que #app existe
+  if (!document.getElementById('app')) {
+    document.body.innerHTML = '<div id="app"></div>';
+  }
+  render();
+}
 
 // ── Rendu principal ───────────────────────────────────────────────────
 function render() {
   const app = document.getElementById('app');
   switch (S.page) {
-    case 'loading':   app.innerHTML = renderSpinner(); break;
-    case 'login':     app.innerHTML = renderLogin();   bindLogin();   break;
-    case 'home':      app.innerHTML = renderHome();    bindNav();     break;
-    case 'training':  app.innerHTML = renderTraining(); bindNav();    break;
-    case 'bilan':     app.innerHTML = renderBilan();   bindNav();     break;
-    case 'classement':app.innerHTML = renderClassement(); bindNav(); break;
-    case 'profil':    app.innerHTML = renderProfil();  bindNav();     break;
+    case 'loading':       app.innerHTML = renderSpinner(); break;
+    case 'login':         app.innerHTML = renderLogin();   bindLogin(); break;
+    case 'home':          app.innerHTML = renderHome();    break;
+    case 'training':      app.innerHTML = renderTraining(); break;
+    case 'bilan':
+    case 'bilan-loading': document.body.innerHTML = renderBilanPage(); break;
+    case 'classement':    app.innerHTML = renderClassement(); break;
+    case 'profil':        app.innerHTML = renderProfil();  break;
   }
 }
 
@@ -278,20 +300,6 @@ function renderTraining() {
   </div>`;
 }
 
-// ── Bilan (placeholder) ───────────────────────────────────────────────
-function renderBilan() {
-  return `
-  <div id="app">
-    ${renderHeader('Bilan', '', false)}
-    <div class="page">
-      <div class="empty">
-        <div class="empty-icon">📊</div>
-        <div class="empty-text">Section bilan en cours de migration…</div>
-      </div>
-    </div>
-    ${renderNavBar('bilan')}
-  </div>`;
-}
 
 // ── Classement ────────────────────────────────────────────────────────
 async function loadClassement() {
@@ -388,7 +396,8 @@ function renderNavBar(active) {
 function bindNav() {}
 
 function goTo(page) {
-  if (page === 'home')       loadHome();
+  if (page === 'home')        loadHome();
+  else if (page === 'bilan')  loadBilan();
   else if (page === 'classement') loadClassement();
   else setPage(page);
 }
