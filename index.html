@@ -124,6 +124,12 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .set-num { font-size:12px;font-weight:700;color:var(--muted);width:24px;flex-shrink:0;text-align:center; }
 .set-input { flex:1;padding:8px 4px;background:#0f1117;color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px;text-align:center;min-width:0; }
 .chrono-btn { background:#1e2444;border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;font-weight:600;padding:6px 10px;cursor:pointer;white-space:nowrap;flex-shrink:0; }
+
+/* ── Diète ── */
+.diete-item { background:#161b2e;border-radius:12px;border:1.5px solid #1e6648;padding:14px 16px;margin-bottom:10px;cursor:pointer;position:relative;overflow:hidden;display:flex;justify-content:space-between;align-items:center; }
+.diete-bar  { position:absolute;top:0;left:0;bottom:0;width:3px;background:linear-gradient(180deg,#3ecf8e,#1a7a52);border-radius:12px 0 0 12px; }
+.diete-arrow { width:26px;height:26px;background:#3ecf8e22;border:1px solid #3ecf8e66;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px;color:#3ecf8e;font-weight:600; }
+.macro-label { font-size:10px;color:var(--muted); }
 </style>
 </head>
 <body>
@@ -131,6 +137,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 <script src="api.js"></script>
 <script src="bilan.js"></script>
 <script src="training.js"></script>
+<script src="diete.js"></script>
 <script>
 // ── État global ───────────────────────────────────────────────────────
 const S = {
@@ -160,6 +167,10 @@ function render() {
     case 'training-loading': document.body.innerHTML = _tSubPage === 'seance' || S.page === 'training-loading' ? renderTrainingPage() : renderTrainingPage(); break;
     case 'bilan':
     case 'bilan-loading': document.body.innerHTML = renderBilanPage(); break;
+    case 'diete':
+    case 'diete-loading': document.body.innerHTML = renderDietePage();
+      if (_dSubPage === 'detail') initDieteSliders((_dDetail && _dDetail.repas || []).length);
+      break;
     case 'classement':    app.innerHTML = renderClassement(); break;
     case 'profil':        app.innerHTML = renderProfil();  break;
   }
@@ -374,11 +385,11 @@ function renderHeader(title, sub, showBack) {
 
 function renderNavBar(active) {
   const items = [
-    { id:'home',       icon:'🏠', label:'Accueil'    },
-    { id:'training',   icon:'🏋️', label:'Programme'  },
-    { id:'bilan',      icon:'📊', label:'Bilan'      },
-    { id:'classement', icon:'🏆', label:'Classement' },
-    { id:'profil',     icon:'👤', label:'Profil'     },
+    { id:'home',       icon:'🏠', label:'Accueil'   },
+    { id:'training',   icon:'🏋️', label:'Programme' },
+    { id:'bilan',      icon:'📊', label:'Bilan'     },
+    { id:'diete',      icon:'🥗', label:'Diète'     },
+    { id:'classement', icon:'🏆', label:'Classement'},
   ];
   return `<nav class="navbar">${items.map(it => `
     <button class="nav-item${it.id===active?' active':''}" onclick="goTo('${it.id}')">
@@ -394,6 +405,7 @@ function goTo(page) {
   if (page === 'home')        loadHome();
   else if (page === 'bilan')    loadBilan();
   else if (page === 'training') loadTraining();
+  else if (page === 'diete')    loadDiete();
   else if (page === 'classement') loadClassement();
   else setPage(page);
 }
