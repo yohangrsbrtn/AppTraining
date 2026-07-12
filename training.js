@@ -12,8 +12,6 @@ let _tInfos           = null;
 let _tFeuilles        = [];
 let _tSemaines        = [];
 let _tSeances         = [];
-let _tChronoInterval  = null;
-let _tChronoLeft      = 0;
 
 async function loadTraining() {
   setPage('training-loading');
@@ -149,7 +147,7 @@ function renderSeance() {
             ${exo.noteCoach ? `<button onclick="afficherNoteCoach(${idx})" style="background:#4f8ef722;border:1px solid #4f8ef755;border-radius:50%;width:26px;height:26px;padding:0;font-size:15px;cursor:pointer;line-height:26px;text-align:center;">💬</button>` : ''}
           </div>
         </div>
-        ${exo.repos ? `<button class="chrono-btn" onclick="lancerChrono(this.dataset.r)" data-r="${(exo.repos||'').replace(/"/g,'&quot;')}">⏱️ ${esc(exo.repos)}</button>` : ''}
+        ${exo.repos ? `<div style="font-size:12px;color:var(--muted);margin-top:4px;">⏱️ ${esc(exo.repos)}</div>` : ''}
       </div>
       ${setsHtml}
       ${exo.notePrec ? `<div style="margin-top:12px;padding:10px;background:#0f1117;border-radius:6px;border-left:3px solid #5a6172;">
@@ -277,106 +275,5 @@ function afficherNoteCoach(idx) {
   document.body.appendChild(modal);
 }
 
-// ── Chrono ────────────────────────────────────────────────────────────
-
-let _audioCtx = null;
-
-function lancerChrono(repos) {
-  repos = (repos + '').replace(/@/g, "'");
-  const match = repos.match(/(\d+)'?\s*(\d+)?/);
-  let totalSec = 0;
-  if (match) {
-    const min = parseInt(match[1]) || 0;
-    const sec = parseInt(match[2]) || 0;
-    totalSec = min * 60 + sec;
-  }
-  if (!totalSec) totalSec = 90;
-  _tChronoLeft = totalSec;
-  afficherReglageChrono();
-}
-
-function getChronoOverlay() {
-  let el = document.getElementById('chronoOverlay');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'chronoOverlay';
-    document.body.appendChild(el);
-  }
-  return el;
-}
-
-function afficherReglageChrono() {
-  if (_tChronoInterval) { clearInterval(_tChronoInterval); _tChronoInterval = null; }
-  const overlay = getChronoOverlay();
-  const m = Math.floor(_tChronoLeft / 60);
-  const s = _tChronoLeft % 60;
-  overlay.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#1a1d29;color:#e8eaf0;padding:24px 20px calc(24px + env(safe-area-inset-bottom));text-align:center;z-index:1000;border-top:2px solid #378ADD;';
-  overlay.innerHTML = `
-    <div style="font-size:13px;color:#8892a4;margin-bottom:16px;text-transform:uppercase;letter-spacing:.05em;">Temps de repos</div>
-    <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:20px;">
-      <button onclick="ajusterChrono(-15)" style="width:48px;height:48px;border-radius:50%;background:#2d3142;color:#e8eaf0;border:none;font-size:20px;cursor:pointer;">−</button>
-      <div style="font-size:42px;font-weight:700;min-width:140px;">${m}:${String(s).padStart(2,'0')}</div>
-      <button onclick="ajusterChrono(15)" style="width:48px;height:48px;border-radius:50%;background:#2d3142;color:#e8eaf0;border:none;font-size:20px;cursor:pointer;">+</button>
-    </div>
-    <div style="display:flex;gap:10px;">
-      <button onclick="demarrerChrono()" style="flex:1;padding:14px;background:#378ADD;color:#fff;border:none;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;">▶ Lancer</button>
-      <button onclick="stopChrono()" style="padding:14px 20px;background:#2d3142;color:#e8eaf0;border:none;border-radius:8px;font-size:16px;cursor:pointer;">✕</button>
-    </div>`;
-  overlay.style.display = 'block';
-}
-
-function ajusterChrono(delta) {
-  _tChronoLeft = Math.max(0, _tChronoLeft + delta);
-  afficherReglageChrono();
-}
-
-function demarrerChrono() {
-  if (_tChronoInterval) clearInterval(_tChronoInterval);
-  try {
-    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    if (_audioCtx.state === 'suspended') _audioCtx.resume();
-    const oUnlock = _audioCtx.createOscillator(), gUnlock = _audioCtx.createGain();
-    gUnlock.gain.value = 0.001;
-    oUnlock.connect(gUnlock); gUnlock.connect(_audioCtx.destination);
-    oUnlock.start(); oUnlock.stop(_audioCtx.currentTime + 0.05);
-    const t0 = _audioCtx.currentTime + _tChronoLeft;
-    for (let i = 0; i < 4; i++) {
-      const osc = _audioCtx.createOscillator(), gain = _audioCtx.createGain();
-      osc.connect(gain); gain.connect(_audioCtx.destination);
-      osc.frequency.value = 880; osc.type = 'sine';
-      const t = t0 + i * 0.22;
-      gain.gain.setValueAtTime(0.3, t); gain.gain.setValueAtTime(0, t + 0.12);
-      osc.start(t); osc.stop(t + 0.13);
-    }
-  } catch(e) {}
-
-  const overlay = getChronoOverlay();
-  let restant = _tChronoLeft;
-  const tick = () => {
-    const m = Math.floor(restant / 60), s = restant % 60;
-    overlay.style.background = '#378ADD';
-    overlay.style.padding = '24px 20px calc(24px + env(safe-area-inset-bottom))';
-    overlay.innerHTML = `
-      <div style="font-size:48px;font-weight:700;">${m}:${String(s).padStart(2,'0')}</div>
-      <div style="font-size:14px;margin-top:8px;cursor:pointer;opacity:.8;" onclick="stopChrono()">Arrêter ✕</div>`;
-    if (restant <= 0) {
-      clearInterval(_tChronoInterval); _tChronoInterval = null;
-      overlay.style.background = '#1D9E75';
-      overlay.innerHTML = `
-        <div style="font-size:32px;font-weight:700;">✅ Repos terminé !</div>
-        <div style="font-size:14px;margin-top:8px;cursor:pointer;opacity:.8;" onclick="stopChrono()">Fermer ✕</div>`;
-      if (navigator.vibrate) navigator.vibrate([300, 100, 300, 100, 300]);
-    }
-    restant--;
-  };
-  tick();
-  _tChronoInterval = setInterval(tick, 1000);
-}
-
-function stopChrono() {
-  if (_tChronoInterval) { clearInterval(_tChronoInterval); _tChronoInterval = null; }
-  const overlay = document.getElementById('chronoOverlay');
-  if (overlay) overlay.style.display = 'none';
-}
 
 function pad(n) { return ('0' + n).slice(-2); }
