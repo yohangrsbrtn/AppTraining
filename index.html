@@ -254,6 +254,8 @@ async function doLogin() {
 }
 
 // ── Home ──────────────────────────────────────────────────────────────
+let _journeeData = null;
+
 async function loadHome() {
   setPage('loading');
   try {
@@ -263,6 +265,18 @@ async function loadHome() {
     ]);
     S.data.prog  = prog;
     S.data.bilan = bilan;
+    // Journée en cours (fire and forget — displayed once data arrives)
+    api('chargerJourneeEnCours').then(j => {
+      _journeeData = j;
+      const el = document.getElementById('carteJourneeHome');
+      if (el) el.outerHTML = renderCarteJournee(j);
+    }).catch(() => {});
+    // Top 5 (fire and forget)
+    api('listerClassement').then(cl => {
+      S.data.classement = cl;
+      const el = document.getElementById('top5Home');
+      if (el) el.outerHTML = renderTop5Home(cl);
+    }).catch(() => {});
     if (S.isCoach) {
       try {
         const bilans = await api('listerBilansCoach');
@@ -275,6 +289,75 @@ async function loadHome() {
     localStorage.removeItem('at_token');
     setPage('login');
   }
+}
+
+function renderCarteJournee(data) {
+  if (!data || data.aucun) return '<div id="carteJourneeHome"></div>';
+  const valide = !!data.valide;
+  const JOURS = ['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
+  const jourNom = JOURS[new Date(Date.now() - 2*3600*1000).getDay()];
+  const col = on => on ? '#1D9E75' : '#555e7a';
+  const steps = data.steps !== '' && data.steps != null
+    ? (parseInt(data.steps) >= 1000 ? Math.round(parseInt(data.steps)/100)/10 + 'k' : data.steps)
+    : '—';
+  const borderColor = valide ? '#1D9E75' : '#378ADD';
+  const cursor = valide ? 'default' : 'pointer';
+  const onclick = valide ? '' : `onclick="ouvrirJourneeModal()"`;
+  return `<div id="carteJourneeHome" ${onclick}
+    ontouchstart="this.style.opacity='.8'" ontouchend="this.style.opacity='1'"
+    style="background:#161b2e;border-radius:12px;border-left:3px solid ${borderColor};border:1px solid ${borderColor}33;border-left:3px solid ${borderColor};padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:14px;cursor:${cursor};-webkit-tap-highlight-color:transparent;">
+    <div style="flex:1;min-width:0;">
+      <div style="font-size:10px;font-weight:700;color:#555e7a;text-transform:uppercase;letter-spacing:1px;margin-bottom:2px;">Journée en cours</div>
+      <div style="font-size:15px;font-weight:700;color:${valide ? '#1D9E75' : '#f0f2ff'};margin-bottom:8px;">${valide ? '✓ Journée validée' : jourNom}</div>
+      <div style="display:flex;gap:12px;">
+        <span style="font-size:12px;color:${col(data.diete)};font-weight:700;">🥗${data.diete ? '✓' : '—'}</span>
+        <span style="font-size:12px;color:#8892a4;font-weight:600;">👟${steps}</span>
+        <span style="font-size:12px;color:${col(data.training)};font-weight:700;">🏋${data.training ? '✓' : '—'}</span>
+        <span style="font-size:12px;color:${col(data.cardio)};font-weight:700;">🏃${data.cardio ? '✓' : '—'}</span>
+      </div>
+    </div>
+    ${!valide ? `<div style="background:linear-gradient(135deg,#378ADD,#1a5ba0);color:#fff;font-size:12px;font-weight:700;padding:8px 12px;border-radius:8px;white-space:nowrap;flex-shrink:0;">Valider ↗</div>` : ''}
+  </div>`;
+}
+
+function renderTop5Home(liste) {
+  if (!liste || liste.length === 0) return '<div id="top5Home"></div>';
+  const _podium = [
+    { bg:'linear-gradient(135deg,#1e1700,#3d2e00)', border:'1.5px solid #f59e0b', namec:'#fde68a' },
+    { bg:'linear-gradient(135deg,#101420,#1e2838)', border:'1.5px solid #94a3b8', namec:'#d4d8e0' },
+    { bg:'linear-gradient(135deg,#140e09,#271c0d)', border:'1px solid #b45309',   namec:'#d4956a' }
+  ];
+  const medals = ['🥇','🥈','🥉'];
+  const rows = liste.map((c, i) => {
+    const tier = typeof niveauToTier === 'function' ? niveauToTier(c.niveau) : 'debutant';
+    const tc = typeof getTierColors === 'function' ? getTierColors(tier) : {c1:'#a8b0c8',c2:'#404858'};
+    const isMe = c.client === S.client || c.id === S.client;
+    const parts = (c.nom || c.prenom || c.client || '').trim().split(' ');
+    const nom = parts[0] + (parts[1] ? ' ' + parts[1][0] + '.' : '');
+    let bg, border, namec;
+    if (i < 3) { bg = _podium[i].bg; border = _podium[i].border; namec = isMe ? tc.c1 : _podium[i].namec; }
+    else { bg = `linear-gradient(145deg,#0f1117,${tc.c2}aa,#0f1117)`; border = isMe ? `1px solid ${tc.c1}88` : '1px solid #1e2235'; namec = isMe ? tc.c1 : '#f0f2ff'; }
+    const badgeSz = i === 0 ? 34 : 30;
+    return `<div style="display:flex;align-items:center;gap:10px;padding:${i===0?'10px':'8px'} 12px;border-radius:10px;margin-bottom:5px;background:${bg};border:${border};">
+      <div style="font-size:16px;min-width:22px;text-align:center;">${i < 3 ? medals[i] : (i+1)+'.'}</div>
+      <div style="flex-shrink:0;">${typeof getBadgeSVG === 'function' ? getBadgeSVG(tier, badgeSz, 't5'+i) : ''}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:${i===0?'14':'13'}px;font-weight:700;color:${namec};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${nom}${isMe?' <span style="font-size:9px;opacity:0.7;">(toi)</span>':''}</div>
+        <div style="font-size:11px;color:#8892a4;margin-top:1px;">Niv. ${c.niveau} · ${(c.xp||0).toLocaleString('fr')} XP</div>
+      </div>
+    </div>`;
+  }).join('');
+  return `<div id="top5Home" style="background:#161b2e;border-radius:12px;border:1px solid #1e2235;padding:14px 16px;margin-top:14px;">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid #1e2235;">
+      <span style="font-size:20px;">🏆</span>
+      <div>
+        <div style="font-size:14px;font-weight:800;background:linear-gradient(90deg,#fde68a,#f59e0b);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">Top 5</div>
+        <div style="font-size:10px;color:#555e7a;text-transform:uppercase;letter-spacing:1.5px;">Classement</div>
+      </div>
+      <button onclick="loadClassement()" style="margin-left:auto;background:transparent;border:none;color:#555e7a;font-size:12px;cursor:pointer;padding:4px 8px;">Voir tout ›</button>
+    </div>
+    ${rows}
+  </div>`;
 }
 
 function renderHome() {
@@ -320,6 +403,8 @@ function renderHome() {
         <button onclick="ouvrirSettings()" style="width:36px;height:36px;background:transparent;border:1px solid #2a2f45;border-radius:9px;padding:0;font-size:17px;margin:0;line-height:36px;color:#555e7a;text-align:center;flex-shrink:0;align-self:flex-start;cursor:pointer;">⚙️</button>
       </div>
     </div>
+
+    ${renderCarteJournee(_journeeData)}
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
 
@@ -380,6 +465,9 @@ function renderHome() {
       </div>` : ''}
 
     </div>
+
+    ${renderTop5Home(S.data.classement)}
+
   </div>`;
 }
 
@@ -442,19 +530,158 @@ function renderProfil() {
   </div>`;
 }
 
-function ouvrirSettings() {
+let _settingsTab = 'menu';
+
+function ouvrirSettings(tab) {
+  _settingsTab = tab || 'menu';
+  const existing = document.getElementById('settingsPanel');
+  if (existing) existing.remove();
   const el = document.createElement('div');
   el.id = 'settingsPanel';
   el.style.cssText = 'position:fixed;inset:0;z-index:500;background:rgba(0,0,0,0.8);display:flex;align-items:flex-end;';
-  el.innerHTML = `<div style="background:#1a1d29;border-radius:16px 16px 0 0;padding:20px 20px calc(24px + env(safe-area-inset-bottom));width:100%;max-width:500px;margin:0 auto;">
+
+  let inner = '';
+  if (_settingsTab === 'guide') {
+    inner = `
+      <button onclick="ouvrirSettings('menu')" style="display:block;width:100%;background:transparent;border:none;color:#8892a4;font-size:13px;padding:0 0 16px;cursor:pointer;text-align:left;">‹ Retour</button>
+      <div style="font-size:16px;font-weight:700;color:#f0f2ff;margin-bottom:16px;">📖 Guide & Fonctionnement</div>
+      <div style="font-size:13px;color:#c0c8d8;line-height:1.7;max-height:55vh;overflow-y:auto;">
+        <div style="font-weight:700;color:#4f8ef7;margin-bottom:6px;">🏋️ Entraînement</div>
+        <div style="margin-bottom:12px;">Saisis tes séances semaine par semaine. Charge, reps et temps de repos sont enregistrés et suivis dans ta progression.</div>
+        <div style="font-weight:700;color:#3ecf8e;margin-bottom:6px;">🥗 Diète</div>
+        <div style="margin-bottom:12px;">Consulte ton plan alimentaire personnalisé. Chaque repas est détaillé avec les macros (protéines, glucides, lipides).</div>
+        <div style="font-weight:700;color:#a78bfa;margin-bottom:6px;">📏 Mensurations</div>
+        <div style="margin-bottom:12px;">Enregistre régulièrement ton poids et tes mensurations pour suivre ton évolution dans le temps avec des graphiques.</div>
+        <div style="font-weight:700;color:#f59e0b;margin-bottom:6px;">📋 Bilan hebdomadaire</div>
+        <div style="margin-bottom:12px;">Chaque semaine, remplis ton bilan (énergie, douleurs, nutrition, entraînement) et valide-le. Ton coach le consulte et te répond.</div>
+        <div style="font-weight:700;color:#378ADD;margin-bottom:6px;">☀️ Journée en cours</div>
+        <div style="margin-bottom:12px;">Chaque jour, coche ce que tu as fait (diète, training, cardio) et renseigne tes pas. Valide ta journée une fois terminée.</div>
+        <div style="font-weight:700;color:#f59e0b;margin-bottom:6px;">⭐ XP & Niveaux</div>
+        <div style="margin-bottom:12px;">Tu gagnes de l'XP en validant tes bilans, journées, séances, etc. Monte de niveau pour débloquer des badges et titres exclusifs.</div>
+      </div>`;
+  } else if (_settingsTab === 'bug') {
+    inner = `
+      <button onclick="ouvrirSettings('menu')" style="display:block;width:100%;background:transparent;border:none;color:#8892a4;font-size:13px;padding:0 0 16px;cursor:pointer;text-align:left;">‹ Retour</button>
+      <div style="font-size:16px;font-weight:700;color:#f0f2ff;margin-bottom:6px;">🐛 Signaler un bug</div>
+      <div style="font-size:12px;color:#8892a4;margin-bottom:16px;">Décris le problème rencontré et sur quelle page</div>
+      <textarea id="bugDesc" placeholder="Ex: Sur la page bilan, le bouton 'Valider' ne répond pas après avoir rempli les champs…"
+        style="width:100%;padding:12px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:10px;font-size:13px;font-family:inherit;resize:none;height:120px;box-sizing:border-box;margin-bottom:12px;"></textarea>
+      <button onclick="envoyerBugReport()" style="width:100%;padding:13px;background:linear-gradient(135deg,#4f8ef7,#2260c8);border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:pointer;">Envoyer le rapport</button>`;
+  } else {
+    inner = `
+      <div style="font-size:16px;font-weight:700;color:#f0f2ff;margin-bottom:16px;">Paramètres</div>
+      <button onclick="document.getElementById('settingsPanel').remove();loadProgression()" style="display:flex;align-items:center;gap:12px;width:100%;background:#131929;border:1px solid #2a3050;color:#e8eaf0;font-size:14px;font-weight:600;padding:13px 16px;border-radius:10px;cursor:pointer;margin-bottom:8px;text-align:left;">📊<span>Ma progression</span></button>
+      <button onclick="document.getElementById('settingsPanel').remove();loadCollection()" style="display:flex;align-items:center;gap:12px;width:100%;background:#131929;border:1px solid #2a3050;color:#e8eaf0;font-size:14px;font-weight:600;padding:13px 16px;border-radius:10px;cursor:pointer;margin-bottom:8px;text-align:left;">🏆<span>Ma collection</span></button>
+      <button onclick="ouvrirSettings('guide')" style="display:flex;align-items:center;gap:12px;width:100%;background:#131929;border:1px solid #2a3050;color:#e8eaf0;font-size:14px;font-weight:600;padding:13px 16px;border-radius:10px;cursor:pointer;margin-bottom:8px;text-align:left;">📖<span>Guide & Fonctionnement</span></button>
+      <button onclick="ouvrirSettings('bug')" style="display:flex;align-items:center;gap:12px;width:100%;background:#131929;border:1px solid #2a3050;color:#e8eaf0;font-size:14px;font-weight:600;padding:13px 16px;border-radius:10px;cursor:pointer;margin-bottom:20px;text-align:left;">🐛<span>Signaler un bug</span></button>
+      <button onclick="document.getElementById('settingsPanel').remove();deconnexion()" style="display:flex;align-items:center;gap:12px;width:100%;background:#1a0a0a;border:1px solid #5a2020;color:#e05c5c;font-size:14px;font-weight:600;padding:13px 16px;border-radius:10px;cursor:pointer;margin-bottom:8px;text-align:left;">🚪<span>Se déconnecter</span></button>
+      <button onclick="document.getElementById('settingsPanel').remove()" style="display:block;width:100%;background:transparent;border:none;color:#555e7a;font-size:14px;padding:10px;cursor:pointer;">Annuler</button>`;
+  }
+
+  el.innerHTML = `<div style="background:#1a1d29;border-radius:16px 16px 0 0;padding:20px 20px calc(28px + env(safe-area-inset-bottom));width:100%;max-width:500px;margin:0 auto;">
     <div style="width:36px;height:4px;background:#2d3142;border-radius:2px;margin:0 auto 20px;"></div>
-    <button onclick="document.getElementById('settingsPanel').remove();loadProgression()" style="display:block;width:100%;background:#131929;border:1px solid #2a3050;color:#e8eaf0;font-size:14px;font-weight:600;padding:13px 16px;border-radius:10px;cursor:pointer;margin-bottom:8px;text-align:left;">📊&nbsp;&nbsp;Ma progression</button>
-    <button onclick="document.getElementById('settingsPanel').remove();loadCollection()" style="display:block;width:100%;background:#131929;border:1px solid #2a3050;color:#e8eaf0;font-size:14px;font-weight:600;padding:13px 16px;border-radius:10px;cursor:pointer;margin-bottom:20px;text-align:left;">🏆&nbsp;&nbsp;Ma collection</button>
-    <button onclick="document.getElementById('settingsPanel').remove();deconnexion()" style="display:block;width:100%;background:#1a0a0a;border:1px solid #5a2020;color:#e05c5c;font-size:14px;font-weight:600;padding:13px 16px;border-radius:10px;cursor:pointer;margin-bottom:8px;text-align:left;">🚪&nbsp;&nbsp;Se déconnecter</button>
-    <button onclick="document.getElementById('settingsPanel').remove()" style="display:block;width:100%;background:transparent;border:none;color:#555e7a;font-size:14px;padding:10px;cursor:pointer;">Annuler</button>
+    ${inner}
   </div>`;
   el.onclick = e => { if (e.target === el) el.remove(); };
   document.body.appendChild(el);
+}
+
+function envoyerBugReport() {
+  const desc = (document.getElementById('bugDesc')?.value || '').trim();
+  if (!desc) return;
+  const msg = `[Bug - ${S.client}] ${desc}`;
+  try { navigator.clipboard.writeText(msg); } catch(e) {}
+  const panel = document.getElementById('settingsPanel');
+  if (panel) {
+    panel.querySelector('div > div').innerHTML = `<div style="text-align:center;padding:20px 0;">
+      <div style="font-size:40px;margin-bottom:12px;">📋</div>
+      <div style="font-size:16px;font-weight:700;color:#f0f2ff;margin-bottom:8px;">Rapport copié !</div>
+      <div style="font-size:13px;color:#8892a4;margin-bottom:16px;">Envoie ce message à ton coach :</div>
+      <div style="background:#0f1117;border:1px solid #2d3142;border-radius:10px;padding:12px;font-size:12px;color:#c0c8d8;text-align:left;word-break:break-word;margin-bottom:20px;">${esc(msg)}</div>
+      <button onclick="document.getElementById('settingsPanel').remove()" style="background:#2d3142;border:none;border-radius:10px;color:#e8eaf0;font-size:14px;padding:12px 24px;cursor:pointer;">Fermer</button>
+    </div>`;
+  }
+}
+
+// ── Journée en cours modal ────────────────────────────────────────────
+async function ouvrirJourneeModal() {
+  if (!_journeeData || _journeeData.aucun || _journeeData.valide) return;
+  // Rafraîchir les données de la ligne connue
+  try {
+    const fresh = await api('chargerDonneesJournee', { ligne: _journeeData.ligne });
+    if (fresh) { _journeeData.diete = fresh.diete; _journeeData.steps = fresh.steps; _journeeData.training = fresh.training; _journeeData.cardio = fresh.cardio; }
+  } catch(e) {}
+  _afficherModalJournee();
+}
+
+function _afficherModalJournee() {
+  const existant = document.getElementById('modalJournee');
+  if (existant) existant.remove();
+  const d = _journeeData;
+  const JOURS = ['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
+  const jourNom = JOURS[new Date(Date.now() - 2*3600*1000).getDay()];
+  const modal = document.createElement('div');
+  modal.id = 'modalJournee';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:flex-end;';
+  modal.innerHTML = `
+    <div style="background:#1a1f35;border-radius:20px 20px 0 0;padding:24px 20px calc(32px + env(safe-area-inset-bottom));width:100%;max-width:500px;margin:0 auto;box-sizing:border-box;">
+      <div style="width:36px;height:4px;background:#2d3142;border-radius:2px;margin:0 auto 20px;"></div>
+      <div style="font-size:11px;font-weight:600;color:#555e7a;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Journée en cours</div>
+      <div style="font-size:18px;font-weight:700;color:#f0f2ff;margin-bottom:20px;">${jourNom}</div>
+      <div style="display:flex;gap:8px;margin-bottom:16px;">
+        <button id="jTogDiete" onclick="toggleJourneeField('diete')" style="flex:1;padding:12px 6px;border:none;border-radius:10px;color:#e8eaf0;font-size:13px;font-weight:600;cursor:pointer;background:${d.diete?'#1D9E75':'#2d3142'};">${d.diete?'✓ ':''}Diète</button>
+        <button id="jTogTraining" onclick="toggleJourneeField('training')" style="flex:1;padding:12px 6px;border:none;border-radius:10px;color:#e8eaf0;font-size:13px;font-weight:600;cursor:pointer;background:${d.training?'#1D9E75':'#2d3142'};">${d.training?'✓ ':''}Training</button>
+        <button id="jTogCardio" onclick="toggleJourneeField('cardio')" style="flex:1;padding:12px 6px;border:none;border-radius:10px;color:#e8eaf0;font-size:13px;font-weight:600;cursor:pointer;background:${d.cardio?'#1D9E75':'#2d3142'};">${d.cardio?'✓ ':''}Cardio</button>
+      </div>
+      <div style="margin-bottom:20px;">
+        <div style="font-size:11px;color:#8892a4;margin-bottom:6px;text-transform:uppercase;letter-spacing:1px;">Steps</div>
+        <input id="jSteps" type="text" inputmode="numeric" value="${d.steps||''}" placeholder="ex: 10200"
+          onchange="sauverStepsJournee(this.value)"
+          style="width:100%;padding:12px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:10px;font-size:16px;box-sizing:border-box;">
+      </div>
+      <button id="btnValiderJournee" onclick="validerJourneeClient()" style="width:100%;padding:14px;background:linear-gradient(135deg,#1D9E75,#167a5a);border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">✅ Valider ma journée</button>
+      <button onclick="document.getElementById('modalJournee').remove()" style="width:100%;margin-top:8px;padding:12px;background:#2d3142;border:none;border-radius:12px;color:#8892a4;font-size:14px;cursor:pointer;">Fermer</button>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+}
+
+function toggleJourneeField(type) {
+  if (!_journeeData) return;
+  _journeeData[type] = !_journeeData[type];
+  const cols = { diete: 14, training: 18, cardio: 19 };
+  api('enregistrerValeur', { nomFeuille: 'Bilan', ligne: _journeeData.ligne, colonne: cols[type], valeur: _journeeData[type] }).catch(() => {});
+  const labels = { diete: 'Diète', training: 'Training', cardio: 'Cardio' };
+  const id = { diete: 'jTogDiete', training: 'jTogTraining', cardio: 'jTogCardio' };
+  const btn = document.getElementById(id[type]);
+  if (btn) { btn.style.background = _journeeData[type] ? '#1D9E75' : '#2d3142'; btn.textContent = (_journeeData[type] ? '✓ ' : '') + labels[type]; }
+}
+
+function sauverStepsJournee(val) {
+  if (!_journeeData) return;
+  const v = parseInt((val+'').replace(/\s/g,'')) || '';
+  _journeeData.steps = v;
+  api('enregistrerValeur', { nomFeuille: 'Bilan', ligne: _journeeData.ligne, colonne: 17, valeur: v }).catch(() => {});
+}
+
+async function validerJourneeClient() {
+  if (!_journeeData) return;
+  const stepsEl = document.getElementById('jSteps');
+  if (stepsEl) sauverStepsJournee(stepsEl.value);
+  const btn = document.getElementById('btnValiderJournee');
+  if (btn) { btn.disabled = true; btn.style.opacity = '0.6'; btn.textContent = 'Validation…'; }
+  try {
+    await api('validerJournee', { ligne: _journeeData.ligne, semaine: _journeeData.semaine });
+    _journeeData.valide = true;
+    const modal = document.getElementById('modalJournee');
+    if (modal) modal.remove();
+    // Mettre à jour la carte
+    const el = document.getElementById('carteJourneeHome');
+    if (el) el.outerHTML = renderCarteJournee(_journeeData);
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.textContent = '✅ Valider ma journée'; }
+    alert('Erreur lors de la validation.');
+  }
 }
 
 function deconnexion() {
