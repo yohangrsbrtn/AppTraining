@@ -17,6 +17,196 @@ function formatTsCoach(ts) {
   return jours[d.getDay()] + ' ' + +m[1] + ' ' + mois[+m[2]-1] + ' à ' + m[4] + 'h' + m[5];
 }
 
+// ── Mes clients ───────────────────────────────────────────────────────
+
+let _mesClients = null;
+let _clientSelectionne = null; // { id, nom, niveau, ... }
+let _clientProgData = null;
+
+async function loadMesClients() {
+  setPage('loading');
+  try {
+    const raw = await api('listerClientsAvecNiveaux');
+    _mesClients = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    setPage('mes-clients');
+  } catch(e) { setPage('coach-home'); }
+}
+
+function ouvrirClientDetail(clientId) {
+  _clientSelectionne = (_mesClients || []).find(c => c.id === clientId) || { id: clientId, nom: clientId };
+  setPage('client-detail');
+}
+
+async function voirProgressionClient(clientId) {
+  setPage('loading');
+  try {
+    _clientProgData = await apiAs('chargerProgressionClient', clientId);
+    _clientProgData._clientId = clientId;
+    _coachBilanRetour = 'client-detail';
+    setPage('client-progression');
+  } catch(e) {
+    showToast('Erreur : ' + e.message, '#c0392b');
+    setPage('client-detail');
+  }
+}
+
+function renderMesClients() {
+  const clients = _mesClients || [];
+
+  const rows = clients.map(c => {
+    const couleur = coachColor(c.id);
+    const tier = typeof niveauToTier === 'function' ? niveauToTier(c.niveau || 1) : 'debutant';
+    const tc   = typeof getTierColors === 'function' ? getTierColors(tier) : { c1: couleur };
+    const sz   = 32;
+    const titreDef = (c.titreActif && typeof TITRES_DEF !== 'undefined') ? TITRES_DEF.find(t => t.id === c.titreActif) : null;
+    const titreHtml = titreDef ? `<span style="font-size:10px;font-weight:700;color:${titreDef.c1};background:${titreDef.c1}22;border:1px solid ${titreDef.c1}44;border-radius:4px;padding:1px 5px;margin-left:6px;">${titreDef.icon} ${titreDef.nom}</span>` : '';
+
+    return `<div onclick="ouvrirClientDetail('${c.id}')"
+      style="background:#161b2e;border-radius:12px;border:1px solid ${couleur}33;
+        border-left:3px solid ${couleur};padding:14px;margin-bottom:10px;cursor:pointer;
+        display:flex;align-items:center;gap:12px;">
+      <div style="flex-shrink:0;">${typeof getBadgeSVG === 'function' ? getBadgeSVG(tier, sz, 'cl'+c.id) : ''}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="display:flex;align-items:center;flex-wrap:wrap;margin-bottom:3px;">
+          <span style="font-size:15px;font-weight:700;color:#f0f2ff;">${esc(c.nom)}</span>
+          ${titreHtml}
+        </div>
+        <div style="font-size:12px;color:${tc.c1};font-weight:600;">Niveau ${c.niveau || 1}</div>
+        ${c.dernConnexion ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">${esc(c.dernConnexion)}</div>` : ''}
+      </div>
+      <div style="color:var(--muted);font-size:18px;">›</div>
+    </div>`;
+  });
+
+  return `<div id="app">
+    ${renderHeader('Mes clients', `${clients.length} client${clients.length > 1 ? 's' : ''}`, false)}
+    <div class="page">
+      ${rows.length ? rows.join('') : '<div class="empty"><div class="empty-icon">👥</div><div class="empty-text">Aucun client trouvé.</div></div>'}
+      <button class="btn-secondary" onclick="setPage('coach-home')" style="margin-top:8px;">← Retour</button>
+    </div>
+  </div>`;
+}
+
+function renderClientDetail() {
+  const c = _clientSelectionne;
+  if (!c) return `<div id="app">${renderHeader('Client','',false)}<div class="page"></div></div>`;
+  const couleur = coachColor(c.id);
+  const tier = typeof niveauToTier === 'function' ? niveauToTier(c.niveau || 1) : 'debutant';
+  const tc   = typeof getTierColors === 'function' ? getTierColors(tier) : { c1: couleur, c2: '#404858', bar: couleur };
+  const sz   = 52;
+  const titreDef = (c.titreActif && typeof TITRES_DEF !== 'undefined') ? TITRES_DEF.find(t => t.id === c.titreActif) : null;
+  const titreHtml = titreDef ? `<div style="margin-top:6px;"><span style="font-size:11px;font-weight:700;color:${titreDef.c1};background:${titreDef.c1}22;border:1px solid ${titreDef.c1}55;border-radius:5px;padding:2px 7px;">${titreDef.icon} ${titreDef.nom}</span></div>` : '';
+
+  return `<div id="app">
+    ${renderHeader(esc(c.nom), '', false)}
+    <div class="page">
+
+      <!-- Hero -->
+      <div style="background:linear-gradient(145deg,#131825 0%,${tc.c2}aa 30%,${tc.c2}ee 50%,${tc.c2}aa 70%,#131825 100%);
+        border-radius:16px;border-top:3px solid ${tc.c1};
+        border-left:1px solid ${tc.c1}44;border-right:1px solid ${tc.c1}44;border-bottom:1px solid ${tc.c1}33;
+        padding:16px;margin-bottom:16px;
+        box-shadow:inset 0 1px 0 ${tc.c1}55,0 0 20px ${tc.c1}33,0 2px 12px rgba(0,0,0,.45);">
+        <div style="display:flex;align-items:center;gap:14px;">
+          <div style="flex-shrink:0;">${typeof getBadgeSVG === 'function' ? getBadgeSVG(tier, sz, 'cd'+c.id) : ''}</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:20px;font-weight:700;color:#f0f2ff;">${esc(c.nom)}</div>
+            <div style="font-size:13px;color:${tc.c1};font-weight:600;margin-top:2px;">NIVEAU ${c.niveau || 1}</div>
+            ${titreHtml}
+            ${c.dernConnexion ? `<div style="font-size:11px;color:var(--muted);margin-top:6px;">${esc(c.dernConnexion)}</div>` : ''}
+          </div>
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div class="section-title" style="color:var(--muted);">Accès rapide</div>
+
+      <div onclick="voirProgressionClient('${c.id}')"
+        style="background:#161b2e;border-radius:12px;border:1px solid var(--border);padding:16px;margin-bottom:10px;cursor:pointer;display:flex;align-items:center;gap:14px;">
+        <div style="font-size:28px;">📈</div>
+        <div style="flex:1;"><div style="font-size:15px;font-weight:600;">Progression</div><div style="font-size:12px;color:var(--muted);margin-top:2px;">XP, bilans validés, séances, pas</div></div>
+        <div style="color:var(--muted);">›</div>
+      </div>
+
+      <div onclick="voirBilanClient('${c.id}','${esc(c.nom)}')"
+        style="background:#161b2e;border-radius:12px;border:1px solid var(--border);padding:16px;margin-bottom:10px;cursor:pointer;display:flex;align-items:center;gap:14px;">
+        <div style="font-size:28px;">📋</div>
+        <div style="flex:1;"><div style="font-size:15px;font-weight:600;">Dernier bilan</div><div style="font-size:12px;color:var(--muted);margin-top:2px;">Voir le bilan clôturé le plus récent</div></div>
+        <div style="color:var(--muted);">›</div>
+      </div>
+
+      <div onclick="voirMensurationsClient('${c.id}','${esc(c.nom)}')"
+        style="background:#161b2e;border-radius:12px;border:1px solid var(--border);padding:16px;margin-bottom:10px;cursor:pointer;display:flex;align-items:center;gap:14px;">
+        <div style="font-size:28px;">📏</div>
+        <div style="flex:1;"><div style="font-size:15px;font-weight:600;">Mensurations</div><div style="font-size:12px;color:var(--muted);margin-top:2px;">Historique poids et mensurations</div></div>
+        <div style="color:var(--muted);">›</div>
+      </div>
+
+      <button class="btn-secondary" onclick="setPage('mes-clients')" style="margin-top:8px;">← Mes clients</button>
+    </div>
+  </div>`;
+}
+
+function renderClientProgression() {
+  const p = _clientProgData || {};
+  const c = _clientSelectionne || {};
+  const niveau = p.niveau || 1;
+  const tier = typeof niveauToTier === 'function' ? niveauToTier(niveau) : 'debutant';
+  const tc   = typeof getTierColors === 'function' ? getTierColors(tier) : { c1:'#a8b0c8', c2:'#404858', bar:'linear-gradient(90deg,#808898,#c0c8d8)' };
+  const sz   = 60;
+  const xpPct = p.pct || (p.xpNiveau && p.xpNiveauSuivant ? Math.min(100, Math.round((p.xpNiveau / p.xpNiveauSuivant) * 100)) : 0);
+  const xpManquant = p.xpManquant != null ? p.xpManquant : ((p.xpNiveauSuivant || 100) - (p.xpNiveau || 0));
+
+  return `<div id="app">
+    ${renderHeader('Progression · ' + esc(c.nom || ''), '', false)}
+    <div class="page">
+      <div style="background:linear-gradient(145deg,#131825 0%,${tc.c2}aa 30%,${tc.c2}ee 50%,${tc.c2}aa 70%,#131825 100%);
+        border-radius:16px;border-top:3px solid ${tc.c1};
+        border-left:1px solid ${tc.c1}44;border-right:1px solid ${tc.c1}44;border-bottom:1px solid ${tc.c1}33;
+        padding:20px 18px;margin-bottom:14px;
+        box-shadow:inset 0 1px 0 ${tc.c1}55,0 0 24px ${tc.c1}33,0 2px 14px rgba(0,0,0,.5);">
+        <div style="display:flex;align-items:center;gap:16px;">
+          <div style="flex-shrink:0;">${typeof getBadgeSVG === 'function' ? getBadgeSVG(tier, sz, 'cp'+c.id) : ''}</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:18px;font-weight:700;color:#f0f2ff;">${esc(c.nom || p.prenom || '')}</div>
+            <div style="font-size:13px;color:${tc.c1};font-weight:600;">NIVEAU ${niveau}</div>
+            <div style="margin-top:10px;display:flex;justify-content:space-between;margin-bottom:5px;">
+              <span style="font-size:10px;color:#8892a4;">${(p.xpNiveau||0).toLocaleString('fr')} XP</span>
+              <span style="font-size:10px;color:${tc.c1};font-weight:600;">${xpManquant.toLocaleString('fr')} → Niv. ${niveau+1}</span>
+            </div>
+            <div style="height:4px;background:#1e2235;border-radius:2px;overflow:hidden;">
+              <div style="height:100%;border-radius:2px;width:${xpPct}%;background:${tc.bar};transition:width .6s;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="stats-row">
+        <div style="background:linear-gradient(135deg,#0f1a10,#162a1a);border:1px solid #1D9E7555;border-radius:14px;padding:18px 12px;text-align:center;">
+          <div style="font-size:28px;margin-bottom:6px;">📋</div>
+          <div style="font-size:34px;font-weight:700;color:#1D9E75;line-height:1;">${p.nbBilansValides || 0}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:6px;">Bilans validés</div>
+        </div>
+        <div style="background:linear-gradient(135deg,#0a1220,#0f1e38);border:1px solid #378ADD55;border-radius:14px;padding:18px 12px;text-align:center;">
+          <div style="font-size:28px;margin-bottom:6px;">🏋️</div>
+          <div style="font-size:34px;font-weight:700;color:#378ADD;line-height:1;">${p.seancesValidees || 0}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:6px;">Séances validées</div>
+        </div>
+      </div>
+
+      <div style="background:linear-gradient(135deg,#0f1520,#151e30);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px;display:flex;align-items:center;gap:14px;">
+        <div style="font-size:32px;">🦶</div>
+        <div>
+          <div style="font-size:26px;font-weight:700;color:#f0f2ff;line-height:1;">${(p.pasTotal || 0).toLocaleString('fr')}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px;">Pas cumulés</div>
+        </div>
+      </div>
+
+      <button class="btn-secondary" onclick="setPage('client-detail')">← Retour</button>
+    </div>
+  </div>`;
+}
+
 // ── Coach home ────────────────────────────────────────────────────────
 
 let _coachBilansCount = 0; // bilans à traiter (badge)
@@ -63,6 +253,17 @@ function renderCoachHome() {
         <div style="flex:1;">
           <div style="font-size:16px;font-weight:700;color:#f0f2ff;">Notifications</div>
           <div style="font-size:13px;color:var(--muted);margin-top:3px;">Activité des clients (7 derniers jours)</div>
+        </div>
+        <div style="color:var(--muted);font-size:18px;">›</div>
+      </div>
+
+      <div onclick="loadMesClients()" style="
+        background:#161b2e;border-radius:14px;border:1.5px solid #4f6ef744;
+        padding:18px 16px;margin-bottom:12px;cursor:pointer;display:flex;align-items:center;gap:14px;">
+        <div style="font-size:34px;flex-shrink:0;">👥</div>
+        <div style="flex:1;">
+          <div style="font-size:16px;font-weight:700;color:#f0f2ff;">Mes clients</div>
+          <div style="font-size:13px;color:var(--muted);margin-top:3px;">Progression, bilans, mensurations</div>
         </div>
         <div style="color:var(--muted);font-size:18px;">›</div>
       </div>
