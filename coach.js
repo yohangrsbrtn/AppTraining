@@ -139,7 +139,11 @@ function renderClientDetail() {
         <div style="color:var(--muted);">›</div>
       </div>
 
-      <button class="btn-secondary" onclick="setPage('mes-clients')" style="margin-top:8px;">← Mes clients</button>
+      <button onclick="enterVueClient('${c.id}')"
+        style="width:100%;background:linear-gradient(135deg,#E8A838,#c88010);color:#1a0e00;border:none;border-radius:var(--radius);font-size:14px;font-weight:700;padding:14px;cursor:pointer;margin-bottom:10px;margin-top:4px;">
+        👁️ Naviguer comme ${esc(c.nom.split(' ')[0])}
+      </button>
+      <button class="btn-secondary" onclick="setPage('mes-clients')" style="margin-top:0px;">← Mes clients</button>
     </div>
   </div>`;
 }

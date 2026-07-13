@@ -160,6 +160,49 @@ function setPage(name) {
     document.body.innerHTML = '<div id="app"></div>';
   }
   render();
+  // Bandeau "Retour coach" persistant en mode vue-client
+  if (_viewAsClientOverride && name !== 'loading') {
+    if (!document.getElementById('coachRetourBanner')) {
+      const nom = (_clientSelectionne && _clientSelectionne.nom) || _viewAsClientOverride;
+      const banner = document.createElement('div');
+      banner.id = 'coachRetourBanner';
+      banner.style.cssText = 'position:fixed;bottom:calc(56px + env(safe-area-inset-bottom) + 8px);left:50%;transform:translateX(-50%);z-index:8000;background:linear-gradient(135deg,#E8A838,#c88010);color:#1a0e00;border-radius:20px;padding:8px 16px 8px 12px;display:flex;align-items:center;gap:10px;box-shadow:0 4px 16px rgba(0,0,0,.5);white-space:nowrap;';
+      banner.innerHTML = `<span style="font-size:12px;font-weight:700;">👁️ Vue de <strong>${esc(nom)}</strong></span><button onclick="exitVueClient()" style="background:rgba(0,0,0,0.2);border:none;color:#1a0e00;font-size:12px;font-weight:700;padding:4px 10px;border-radius:10px;cursor:pointer;">✕ Retour</button>`;
+      document.body.appendChild(banner);
+    }
+  }
+}
+
+// ── Vue client (coach simule un client) ───────────────────────────────
+let _coachSavedState = null;
+
+function enterVueClient(clientId) {
+  const nom = (_clientSelectionne && _clientSelectionne.nom) || clientId;
+  _coachSavedState = {
+    client: S.client,
+    isCoach: S.isCoach,
+    data: S.data,
+    journeeData: _journeeData
+  };
+  S.client = clientId;
+  S.isCoach = false;
+  S.data = {};
+  _journeeData = null;
+  _viewAsClientOverride = clientId;
+  loadHome();
+}
+
+function exitVueClient() {
+  if (!_coachSavedState) return;
+  _viewAsClientOverride = null;
+  S.client  = _coachSavedState.client;
+  S.isCoach = _coachSavedState.isCoach;
+  S.data    = _coachSavedState.data;
+  _journeeData = _coachSavedState.journeeData;
+  _coachSavedState = null;
+  const banner = document.getElementById('coachRetourBanner');
+  if (banner) banner.remove();
+  setPage('client-detail');
 }
 
 // ── Rendu principal ───────────────────────────────────────────────────
@@ -340,7 +383,7 @@ function renderTop5Home(liste) {
       <div style="flex-shrink:0;">${typeof getBadgeSVG === 'function' ? getBadgeSVG(tier, badgeSz, 't5'+i) : ''}</div>
       <div style="flex:1;min-width:0;">
         <div style="font-size:${i===0?'14':'13'}px;font-weight:700;color:${namec};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${nom}${isMe?' <span style="font-size:9px;opacity:0.7;">(toi)</span>':''}</div>
-        <div style="font-size:11px;color:#8892a4;margin-top:1px;">Niv. ${c.niveau} · ${(c.xp||0).toLocaleString('fr')} XP</div>
+        <div style="font-size:11px;color:#8892a4;margin-top:1px;">Niv. ${c.niveau} · ${(c.xpTotal||0).toLocaleString('fr')} XP</div>
       </div>
     </div>`;
   }).join('');
@@ -505,7 +548,7 @@ function renderClassement() {
       <div class="list-icon" style="font-size:18px;">${medal}</div>
       <div class="list-text">
         <div class="list-title">${c.prenom || c.client}</div>
-        <div class="list-sub">Niv. ${c.niveau} · ${(c.xp||0).toLocaleString('fr')} XP</div>
+        <div class="list-sub">Niv. ${c.niveau} · ${(c.xpTotal||0).toLocaleString('fr')} XP</div>
       </div>
     </div>`;
   }).join('');

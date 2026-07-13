@@ -3,8 +3,12 @@ const GAS_URL = 'https://script.google.com/macros/s/AKfycbwQiM6ixf-CTIWwcuNHoosF
 function getToken()  { return localStorage.getItem('at_token')  || ''; }
 function getClient() { return localStorage.getItem('at_client') || ''; }
 
+// Quand le coach navigue en "vue client", toutes les requêtes api() utilisent ce client
+let _viewAsClientOverride = null;
+
 async function api(action, params = {}) {
-  const body = { action, token: getToken(), client: getClient(), params };
+  const clientId = (_viewAsClientOverride != null) ? _viewAsClientOverride : getClient();
+  const body = { action, token: getToken(), client: clientId, params };
   const res = await fetch(GAS_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain' },
