@@ -255,8 +255,6 @@ async function doLogin() {
 
 // ── Home ──────────────────────────────────────────────────────────────
 let _journeeData = null;
-let _journeeLoaded = false;
-let _classementLoaded = false;
 
 async function loadHome() {
   setPage('loading');
@@ -275,24 +273,6 @@ async function loadHome() {
       } catch(e) { S.data.coachBilansCount = 0; }
     }
     setPage('home');
-    // Journée et classement : chargés une seule fois par session (cache ensuite)
-    // Évite l'accumulation de requêtes GAS qui sature les connexions iOS Safari
-    if (!_journeeLoaded) {
-      _journeeLoaded = true;
-      api('chargerJourneeEnCours').then(j => {
-        _journeeData = j;
-        const el = document.getElementById('carteJourneeHome');
-        if (el && el.parentNode) el.outerHTML = renderCarteJournee(j);
-      }).catch(() => {});
-    }
-    if (!_classementLoaded) {
-      _classementLoaded = true;
-      api('listerClassement').then(cl => {
-        S.data.classement = cl;
-        const el = document.getElementById('top5Home');
-        if (el && el.parentNode) el.outerHTML = renderTop5Home(cl);
-      }).catch(() => {});
-    }
   } catch(e) {
     localStorage.removeItem('at_token');
     setPage('login');
@@ -412,8 +392,6 @@ function renderHome() {
       </div>
     </div>
 
-    ${renderCarteJournee(_journeeData)}
-
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
 
       <div onclick="goTo('training')" ontouchstart="this.style.background='#242838'" ontouchend="this.style.background='#1a1d29'" style="background:#1a1d29;border-radius:12px;padding:18px 14px;text-align:center;cursor:pointer;border-top:3px solid #4f8ef7;-webkit-tap-highlight-color:transparent;">
@@ -473,8 +451,6 @@ function renderHome() {
       </div>` : ''}
 
     </div>
-
-    ${renderTop5Home(S.data.classement)}
 
   </div>`;
 }
