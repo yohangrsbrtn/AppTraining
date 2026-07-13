@@ -158,3 +158,164 @@ function renderCollectionPage() {
     ${renderNavBar('home')}
   </div>`;
 }
+
+// ── Système de déblocage (level-up + titres) ──────────────────────────
+
+function detecterDeblocagesNiveau(niveau) {
+  const key = 'lastNiveau_' + getClient();
+  let stored = null;
+  try { stored = localStorage.getItem(key); } catch(e) {}
+  try { localStorage.setItem(key, niveau); } catch(e) {}
+  if (stored === null) return [];
+  const ancien = parseInt(stored) || 0;
+  if (niveau <= ancien) return [];
+  const TIERS = {10:'bronze',20:'argent',30:'or',40:'platine',50:'diamant',60:'legendaire'};
+  const TIERS_DESC = {bronze:'Les bases sont posées, la machine tourne',argent:'La régularité commence à payer',or:'Une vraie machine de guerre',platine:"L'élite du coaching",diamant:'Au-delà des limites — niveau rare',legendaire:'Statut mythique — légende vivante'};
+  const TIERS_NOM = {bronze:'Bronze',argent:'Argent',or:'Or',platine:'Platine',diamant:'Diamant',legendaire:'Légendaire'};
+  const LEVEL_DESCS = ['Continue comme ça — tu cartonnes !','Chaque séance te rapproche du sommet.','La régularité paie, toujours.','Tu ne lâches rien !','Impressionnant, continue ainsi.','Le travail paye — niveau après niveau.','Tu es sur la bonne voie.'];
+  const result = [];
+  for (let n = ancien + 1; n <= niveau; n++) {
+    const tier = TIERS[n];
+    if (tier) {
+      result.push({type:'niveau', tier, nom:'Emblème '+TIERS_NOM[tier], desc:TIERS_DESC[tier]});
+    } else {
+      result.push({type:'levelup', niveau:n, desc:LEVEL_DESCS[n % LEVEL_DESCS.length]});
+    }
+  }
+  return result;
+}
+
+function detecterDeblocagesTitres(pasTotal, nbBilans, nbSeances, niveau) {
+  window._titresAnimes = window._titresAnimes || {};
+  const nouveaux = [];
+  const client = getClient();
+  TITRES_DEF.forEach(b => {
+    const key = 'lastTitre_' + client + '_' + b.id;
+    let stored = null;
+    try { stored = localStorage.getItem(key); } catch(e) {}
+    const val = b.cat === 'pas' ? pasTotal : b.cat === 'bilan' ? nbBilans : b.cat === 'seance' ? (nbSeances||0) : (niveau||0);
+    const etaitDebloque = stored === '1';
+    const estDebloque = val >= b.seuil;
+    try {
+      if (estDebloque) localStorage.setItem(key, '1');
+      else if (stored === null) localStorage.setItem(key, '0');
+    } catch(e) {}
+    if (estDebloque && !etaitDebloque && stored !== null && !window._titresAnimes[key]) {
+      window._titresAnimes[key] = true;
+      nouveaux.push({type:'titre', id:b.id, nom:b.nom, desc:b.cond, c1:b.c1, c2:b.c2, icon:b.icon});
+    }
+  });
+  return nouveaux;
+}
+
+function afficherDeblocage(items) {
+  if (!items || items.length === 0) return;
+  window._deblocageQueue = (window._deblocageQueue || []).concat(items);
+  if (!window._deblocageActif) afficherProchainDeblocage();
+}
+
+function afficherProchainDeblocage() {
+  if (!window._deblocageQueue || window._deblocageQueue.length === 0) { window._deblocageActif = false; return; }
+  window._deblocageActif = true;
+  const item = window._deblocageQueue.shift();
+
+  const old = document.getElementById('_deblocageOverlay');
+  if (old) old.remove();
+
+  if (item.type === 'levelup') {
+    if (!document.getElementById('_dbkStyle')) {
+      const st = document.createElement('style');
+      st.id = '_dbkStyle';
+      st.textContent = '@keyframes lvlFall{0%{transform:translateY(-20px) rotate(0deg);opacity:.8}100%{transform:translateY(110vh) rotate(400deg);opacity:0}}@keyframes lvlSway{0%,100%{margin-left:0}50%{margin-left:18px}}@keyframes lvlBurst{0%{transform:translate(-50%,-50%) scale(1);opacity:1}100%{transform:translate(calc(-50% + var(--bx)),calc(-50% + var(--by))) scale(0);opacity:0}}';
+      document.head.appendChild(st);
+    }
+    const ov = document.createElement('div');
+    ov.id = '_deblocageOverlay';
+    ov.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(5,8,20,0.97);z-index:10000;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;animation:fadeInModal 0.3s ease both;overflow:hidden;';
+    const cfColors = ['#40C8FF','#60E0FF','#FFD700','#FF8040','#C080FF','#60E040','#f0f2ff','#FF6090'];
+    for (let ci = 0; ci < 32; ci++) {
+      const cd = document.createElement('div');
+      const sz = (4 + Math.random()*6).toFixed(1), dur = (2.6 + Math.random()*3).toFixed(1), dly = (Math.random()*3.2).toFixed(2);
+      cd.style.cssText = 'position:absolute;top:-12px;left:'+(Math.random()*100).toFixed(1)+'%;width:'+sz+'px;height:'+sz+'px;background:'+cfColors[ci%cfColors.length]+';border-radius:'+(Math.random()>.5?'50%':'2px')+';opacity:.75;pointer-events:none;animation:lvlFall '+dur+'s linear '+dly+'s infinite,lvlSway '+(dur*.55).toFixed(1)+'s ease-in-out '+dly+'s infinite;';
+      ov.appendChild(cd);
+    }
+    for (let si = 0; si < 16; si++) {
+      const sp = document.createElement('div');
+      const ang = (si/16)*Math.PI*2, dist = 65 + Math.random()*90, spSz = (4+Math.random()*5).toFixed(1), spDly = (.1+Math.random()*.4).toFixed(2);
+      sp.style.cssText = 'position:absolute;top:50%;left:50%;width:'+spSz+'px;height:'+spSz+'px;border-radius:50%;background:'+cfColors[si%cfColors.length]+';--bx:'+Math.round(Math.cos(ang)*dist)+'px;--by:'+Math.round(Math.sin(ang)*dist)+'px;animation:lvlBurst 1.3s ease-out '+spDly+'s both;';
+      ov.appendChild(sp);
+    }
+    const inn = document.createElement('div');
+    inn.style.cssText = 'text-align:center;max-width:300px;position:relative;z-index:1;width:100%;';
+    const lbl = document.createElement('div');
+    lbl.style.cssText = 'font-size:10px;font-weight:700;color:#40C8FF;text-transform:uppercase;letter-spacing:4px;margin-bottom:18px;animation:slideDown 0.45s ease both;';
+    lbl.textContent = '⬆ Niveau atteint !';
+    inn.appendChild(lbl);
+    const bigN = document.createElement('div');
+    bigN.style.cssText = 'font-size:96px;font-weight:900;line-height:1;color:#f0f2ff;font-family:Georgia,serif;text-shadow:0 0 80px #40A8FF44;animation:popIn 0.7s cubic-bezier(0.34,1.56,0.64,1) 0.1s both;';
+    bigN.textContent = item.niveau;
+    inn.appendChild(bigN);
+    const nivW = document.createElement('div');
+    nivW.style.cssText = 'font-size:12px;color:#8892a4;letter-spacing:3px;margin-top:-4px;animation:slideUp2 0.45s ease 0.3s both;';
+    nivW.textContent = 'N I V E A U';
+    inn.appendChild(nivW);
+    const dsc = document.createElement('div');
+    dsc.style.cssText = 'font-size:13px;color:#40C8FF;margin-top:16px;line-height:1.5;animation:slideUp2 0.45s ease 0.4s both;';
+    dsc.textContent = item.desc || 'Continue comme ça — tu cartonnes !';
+    inn.appendChild(dsc);
+    const btn = document.createElement('button');
+    btn.style.cssText = 'margin-top:24px;width:100%;padding:15px;background:linear-gradient(90deg,#004A90,#40C8FF,#004A90);border:none;border-radius:14px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;-webkit-tap-highlight-color:transparent;animation:slideUp2 0.45s ease 0.5s both;';
+    btn.textContent = 'Continuons ! 💪';
+    btn.addEventListener('click', fermerDeblocage);
+    inn.appendChild(btn);
+    ov.appendChild(inn);
+    document.body.appendChild(ov);
+    return;
+  }
+
+  const tc = item.type === 'niveau'
+    ? (typeof getTierColors === 'function' ? getTierColors(item.tier) : {c1:'#a8b0c8', c2:'#404858'})
+    : {c1: item.c1 || '#a8b0c8', c2: item.c2 || '#404858'};
+
+  const visuel = item.type === 'niveau'
+    ? getBadgeSVG(item.tier, 120, 'dbk')
+    : `<div style="width:96px;height:96px;border-radius:50%;background:linear-gradient(135deg,${tc.c1}cc,${tc.c2});display:flex;align-items:center;justify-content:center;box-shadow:0 0 30px ${tc.c1}66;font-size:44px;">${item.icon || '🏆'}</div>`;
+
+  const overlay = document.createElement('div');
+  overlay.id = '_deblocageOverlay';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(5,8,20,0.96);z-index:10000;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;animation:fadeInModal 0.3s ease both;';
+  const glow = document.createElement('div');
+  glow.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:300px;height:300px;border-radius:50%;background:radial-gradient(circle,'+tc.c1+'18 0%,transparent 65%);pointer-events:none;animation:pulseGlow 2.5s ease infinite;';
+  overlay.appendChild(glow);
+  const inner = document.createElement('div');
+  inner.style.cssText = 'text-align:center;max-width:310px;position:relative;z-index:1;width:100%;';
+  const lbl2 = document.createElement('div');
+  lbl2.style.cssText = 'font-size:10px;font-weight:700;color:'+tc.c1+';text-transform:uppercase;letter-spacing:4px;margin-bottom:22px;animation:slideDown 0.45s ease both;';
+  lbl2.textContent = '🔓 Débloqué !';
+  inner.appendChild(lbl2);
+  const bwrap = document.createElement('div');
+  bwrap.style.cssText = 'display:flex;justify-content:center;animation:popIn 0.65s cubic-bezier(0.34,1.56,0.64,1) 0.08s both;';
+  bwrap.innerHTML = visuel;
+  inner.appendChild(bwrap);
+  const nom = document.createElement('div');
+  nom.style.cssText = 'font-size:24px;font-weight:800;color:#f0f2ff;margin-top:22px;text-shadow:0 0 24px '+tc.c1+'44;animation:slideUp2 0.45s ease 0.22s both;';
+  nom.textContent = item.nom;
+  inner.appendChild(nom);
+  const desc = document.createElement('div');
+  desc.style.cssText = 'font-size:13px;color:'+tc.c1+';margin-top:8px;line-height:1.5;animation:slideUp2 0.45s ease 0.32s both;';
+  desc.textContent = item.desc;
+  inner.appendChild(desc);
+  const btn2 = document.createElement('button');
+  btn2.style.cssText = 'margin-top:32px;width:100%;padding:15px;background:linear-gradient(90deg,'+tc.c2+','+tc.c1+','+tc.c2+');border:none;border-radius:14px;color:#fff;font-size:16px;font-weight:700;box-shadow:0 4px 24px '+tc.c1+'44;-webkit-tap-highlight-color:transparent;cursor:pointer;animation:slideUp2 0.45s ease 0.42s both;';
+  btn2.textContent = 'Super ! 🔥';
+  btn2.addEventListener('click', fermerDeblocage);
+  inner.appendChild(btn2);
+  overlay.appendChild(inner);
+  document.body.appendChild(overlay);
+}
+
+function fermerDeblocage() {
+  const el = document.getElementById('_deblocageOverlay');
+  if (el) { el.style.opacity = '0'; el.style.transition = 'opacity 0.22s ease'; }
+  setTimeout(() => { if (el && el.parentNode) el.remove(); afficherProchainDeblocage(); }, 240);
+}

@@ -325,13 +325,56 @@ async function confirmerCloture(ligneTitre) {
   document.querySelector('[style*="position:fixed;inset"]')?.remove();
   setPage('bilan-loading');
   try {
-    await api('validerBilan', { ligneTitre, targetSunday: _bilanData?.targetSunday || null });
+    const result = await api('validerBilan', { ligneTitre, targetSunday: _bilanData?.targetSunday || null });
     await loadBilan();
-    showToast('✅ Bilan clôturé !', '#1D9E75');
+    if (result && result.xp) {
+      afficherXPValidation(result);
+    } else {
+      showToast('✅ Bilan clôturé !', '#1D9E75');
+    }
   } catch(e) {
     showToast('Erreur : ' + e.message, '#c0392b');
     setPage('bilan');
   }
+}
+
+function afficherXPValidation(result) {
+  const xp = result.xp || 50;
+  const rows = [['Clôture 🔒', result.xpBase || 50]];
+  if (result.bonusDiete > 0)   rows.push(['Diète 7/7 ✅', result.bonusDiete]);
+  if (result.bonusSeances > 0) rows.push(['Objectif séances ✅', result.bonusSeances]);
+  if (result.bonusSteps > 0)   rows.push(['Bonus steps 👟', result.bonusSteps]);
+  if (result.bonusStreak > 0)  rows.push(['Streak bilans 🔥', result.bonusStreak]);
+  const bonusHtml = rows.map(r =>
+    `<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #2d3142;">
+      <span style="font-size:13px;color:#8892a4;">${r[0]}</span>
+      <span style="font-size:13px;font-weight:600;color:#e8eaf0;">+${r[1]} XP</span>
+    </div>`
+  ).join('');
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;z-index:9999;opacity:0;transition:opacity 0.3s;';
+  overlay.innerHTML = `<div style="background:#1a1d29;border-radius:20px;padding:36px 28px;text-align:center;max-width:300px;width:85%;box-shadow:0 20px 60px rgba(0,0,0,0.5);transform:scale(0.85);transition:transform 0.3s;">
+    <div style="font-size:52px;margin-bottom:10px;">🏆</div>
+    <div style="font-size:22px;font-weight:700;color:#e8eaf0;margin-bottom:4px;">Bilan clôturé !</div>
+    <div style="font-size:13px;color:#8892a4;margin-bottom:18px;">Bravo pour cette semaine !</div>
+    <div style="background:#0f1117;border-radius:12px;padding:4px 16px 8px;margin-bottom:16px;text-align:left;">
+      ${bonusHtml}
+      <div style="display:flex;justify-content:space-between;padding:10px 0 2px;">
+        <span style="font-size:15px;font-weight:700;color:#e8eaf0;">Total gagné</span>
+        <span style="font-size:20px;font-weight:800;color:#f0a500;">+${xp} XP ⭐</span>
+      </div>
+    </div>
+    <button id="_xpOverlayBtn" style="background:linear-gradient(135deg,#1D9E75,#167a5a);width:100%;margin:0;padding:14px;border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">Retour à l'accueil</button>
+  </div>`;
+  document.body.appendChild(overlay);
+  document.getElementById('_xpOverlayBtn').addEventListener('click', () => {
+    overlay.remove();
+    loadHome();
+  });
+  requestAnimationFrame(() => {
+    overlay.style.opacity = '1';
+    overlay.querySelector('div').style.transform = 'scale(1)';
+  });
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────
