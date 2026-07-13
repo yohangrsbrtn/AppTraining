@@ -1,4 +1,4 @@
-const CACHE = 'apptraining-v1';
+const CACHE = 'apptraining-v2';
 const ASSETS = ['/AppTraining/', '/AppTraining/index.html', '/AppTraining/manifest.json'];
 
 self.addEventListener('install', e => {
