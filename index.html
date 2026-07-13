@@ -260,8 +260,18 @@ async function loadHome() {
 function renderHome() {
   const p = S.data.prog  || {};
   const b = S.data.bilan || {};
-  const xpPct = p.xpNiveau && p.xpNiveauSuivant
-    ? Math.round((p.xpNiveau / p.xpNiveauSuivant) * 100) : 0;
+  const niveau = p.niveau || 1;
+  const tier = typeof niveauToTier === 'function' ? niveauToTier(niveau) : 'debutant';
+  const tc   = typeof getTierColors === 'function' ? getTierColors(tier) : {c1:'#a8b0c8',c2:'#404858',bar:'linear-gradient(90deg,#808898,#c0c8d8)'};
+  const sz   = tier === 'legendaire' ? 52 : tier === 'diamant' ? 48 : tier === 'platine' ? 44 : 40;
+  const xpPct = p.pct || (p.xpNiveau && p.xpNiveauSuivant
+    ? Math.min(100, Math.round((p.xpNiveau / p.xpNiveauSuivant) * 100)) : 0);
+  const xpManquant = p.xpManquant != null ? p.xpManquant : ((p.xpNiveauSuivant || 100) - (p.xpNiveau || 0));
+
+  const titreId = p.titreActif || ((() => { try { return localStorage.getItem('titreActif_' + S.client) || null; } catch(e){ return null; } })());
+  const titreDef = titreId && typeof TITRES_DEF !== 'undefined' ? TITRES_DEF.find(t => t.id === titreId) : null;
+  const titreHtml = titreDef ? `<span style="font-size:11px;font-weight:700;color:${titreDef.c1};background:${titreDef.c1}22;border:1px solid ${titreDef.c1}55;border-radius:5px;padding:2px 7px;">${titreDef.icon} ${titreDef.nom}</span>` : '';
+
   const bilanBadge = b.dejaValide
     ? `<span class="badge badge-green">✓ Clôturé</span>`
     : `<span class="badge badge-red">En attente</span>`;
@@ -270,11 +280,30 @@ function renderHome() {
   <div id="app">
     ${renderHeader('Mon Training', '', false)}
     <div class="page">
-      <div class="card">
-        <div class="card-title">Niveau ${p.niveau || 1}</div>
-        <div style="font-size:22px;font-weight:700;">${p.prenom || S.client}</div>
-        <div class="xp-bar-bg"><div class="xp-bar-fill" style="width:${xpPct}%"></div></div>
-        <div style="font-size:12px;color:var(--muted);">${p.xpNiveau || 0} / ${p.xpNiveauSuivant || 100} XP</div>
+      <!-- Hero card -->
+      <div onclick="goTo('progression')" style="
+        background:linear-gradient(145deg,#131825 0%,${tc.c2}aa 30%,${tc.c2}ee 50%,${tc.c2}aa 70%,#131825 100%);
+        border-radius:16px;border-top:3px solid ${tc.c1};
+        border-left:1px solid ${tc.c1}44;border-right:1px solid ${tc.c1}44;border-bottom:1px solid ${tc.c1}33;
+        padding:16px;margin-bottom:12px;cursor:pointer;
+        box-shadow:inset 0 1px 0 ${tc.c1}55,0 0 24px ${tc.c1}33,0 2px 14px rgba(0,0,0,0.45);">
+        <div style="display:flex;align-items:center;gap:14px;">
+          <div style="flex-shrink:0;">${typeof getBadgeSVG === 'function' ? getBadgeSVG(tier, sz, 'hm') : ''}</div>
+          <div style="flex:1;min-width:0;">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:3px;">
+              <span style="font-size:18px;font-weight:700;color:#f0f2ff;">${p.prenom || S.client}</span>
+              ${titreHtml}
+            </div>
+            <div style="font-size:12px;color:${tc.c1};font-weight:600;letter-spacing:.3px;margin-bottom:8px;">NIVEAU ${niveau}</div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:5px;">
+              <span style="font-size:10px;color:#8892a4;">${(p.xpNiveau||0).toLocaleString('fr')} XP</span>
+              <span style="font-size:10px;color:${tc.c1};font-weight:600;">${xpManquant.toLocaleString('fr')} XP → Niv. ${niveau+1}</span>
+            </div>
+            <div style="height:4px;background:#1e2235;border-radius:2px;overflow:hidden;">
+              <div style="height:100%;border-radius:2px;width:${xpPct}%;background:${tc.bar};transition:width .6s;"></div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="stats-row">
