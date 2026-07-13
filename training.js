@@ -147,7 +147,7 @@ function renderSeance() {
             ${exo.noteCoach ? `<button onclick="afficherNoteCoach(${idx})" style="background:#4f8ef722;border:1px solid #4f8ef755;border-radius:50%;width:26px;height:26px;padding:0;font-size:15px;cursor:pointer;line-height:26px;text-align:center;">💬</button>` : ''}
           </div>
         </div>
-        ${exo.repos ? `<div style="font-size:12px;color:var(--muted);margin-top:4px;">⏱️ ${esc(exo.repos)}</div>` : ''}
+        ${exo.repos ? `<button class="chrono-btn" onclick="lancerChrono(&quot;${(exo.repos||'').replace(/'/g,'@')}&quot;)">⏱️ ${esc(exo.repos)}</button>` : ''}
       </div>
       ${setsHtml}
       ${exo.notePrec ? `<div style="margin-top:12px;padding:10px;background:#0f1117;border-radius:6px;border-left:3px solid #5a6172;">
@@ -277,3 +277,110 @@ function afficherNoteCoach(idx) {
 
 
 function pad(n) { return ('0' + n).slice(-2); }
+
+// ── Chrono ────────────────────────────────────────────────────────────
+let _chronoInterval = null;
+let _tempsChrono = 90;
+let _audioCtx = null;
+
+function lancerChrono(repos) {
+  repos = (repos + '').replace(/@/g, "'");
+  let totalSec = 0;
+  const match = repos.match(/(\d+)'?\s*(\d+)?/);
+  if (match) {
+    const min = parseInt(match[1]) || 0;
+    const sec = parseInt(match[2]) || 0;
+    totalSec = min * 60 + sec;
+  }
+  if (totalSec === 0) totalSec = 90;
+  _tempsChrono = totalSec;
+  _afficherReglageChrono();
+}
+
+function _afficherReglageChrono() {
+  let overlay = document.getElementById('chronoOverlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'chronoOverlay';
+    document.body.appendChild(overlay);
+  }
+  const m = Math.floor(_tempsChrono / 60);
+  const s = _tempsChrono % 60;
+  overlay.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#1a1d29;color:white;padding:24px 20px;text-align:center;z-index:2000;border-top:2px solid #378ADD;';
+  overlay.innerHTML = `
+    <div style="font-size:13px;color:#8892a4;margin-bottom:16px;text-transform:uppercase;letter-spacing:0.05em;">Temps de repos</div>
+    <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:20px;">
+      <button onclick="ajusterChrono(-15)" style="width:48px;height:48px;border-radius:50%;background:#2d3142;color:white;border:none;font-size:20px;cursor:pointer;">−</button>
+      <div style="font-size:42px;font-weight:700;min-width:140px;">${m}:${s.toString().padStart(2,'0')}</div>
+      <button onclick="ajusterChrono(15)" style="width:48px;height:48px;border-radius:50%;background:#2d3142;color:white;border:none;font-size:20px;cursor:pointer;">+</button>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <button onclick="demarrerChrono()" style="flex:1;padding:14px;background:#378ADD;color:white;border:none;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;">▶ Lancer</button>
+      <button onclick="stopChrono()" style="padding:14px 20px;background:#2d3142;color:white;border:none;border-radius:8px;font-size:16px;cursor:pointer;">✕</button>
+    </div>
+  `;
+  overlay.style.display = 'block';
+}
+
+function ajusterChrono(delta) {
+  _tempsChrono = Math.max(0, _tempsChrono + delta);
+  _afficherReglageChrono();
+}
+
+function demarrerChrono() {
+  if (_chronoInterval) clearInterval(_chronoInterval);
+  try {
+    if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (_audioCtx.state === 'suspended') _audioCtx.resume();
+    const oscUnlock = _audioCtx.createOscillator();
+    const gainUnlock = _audioCtx.createGain();
+    gainUnlock.gain.value = 0.001;
+    oscUnlock.connect(gainUnlock);
+    gainUnlock.connect(_audioCtx.destination);
+    oscUnlock.start();
+    oscUnlock.stop(_audioCtx.currentTime + 0.05);
+    const debutBips = _audioCtx.currentTime + _tempsChrono;
+    for (let i = 0; i < 4; i++) {
+      const osc = _audioCtx.createOscillator();
+      const gain = _audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(_audioCtx.destination);
+      osc.frequency.value = 880;
+      osc.type = 'sine';
+      const t = debutBips + i * 0.22;
+      gain.gain.setValueAtTime(0.3, t);
+      gain.gain.setValueAtTime(0, t + 0.12);
+      osc.start(t);
+      osc.stop(t + 0.13);
+    }
+  } catch(e) {}
+  const overlay = document.getElementById('chronoOverlay');
+  let restant = _tempsChrono;
+  const tick = () => {
+    const m = Math.floor(restant / 60);
+    const s = restant % 60;
+    overlay.style.background = '#378ADD';
+    overlay.innerHTML = `
+      <div style="font-size:48px;font-weight:700;">${m}:${s.toString().padStart(2,'0')}</div>
+      <div style="font-size:14px;margin-top:8px;cursor:pointer;opacity:0.8;" onclick="stopChrono()">Arrêter ✕</div>
+    `;
+    if (restant <= 0) {
+      clearInterval(_chronoInterval);
+      overlay.style.background = '#1D9E75';
+      overlay.innerHTML = `
+        <div style="font-size:32px;font-weight:700;">✅ Repos terminé !</div>
+        <div style="font-size:14px;margin-top:8px;cursor:pointer;opacity:0.8;" onclick="stopChrono()">Fermer ✕</div>
+      `;
+      if (navigator.vibrate) navigator.vibrate([300, 100, 300, 100, 300]);
+    }
+    restant--;
+  };
+  tick();
+  _chronoInterval = setInterval(tick, 1000);
+}
+
+function stopChrono() {
+  if (_chronoInterval) clearInterval(_chronoInterval);
+  const overlay = document.getElementById('chronoOverlay');
+  if (overlay) overlay.style.display = 'none';
+}

@@ -273,6 +273,15 @@ async function loadHome() {
       } catch(e) { S.data.coachBilansCount = 0; }
     }
     setPage('home');
+    // fire-and-forget classement — lit un spreadsheet séparé (LOG_SHEET_ID), safe en concurrent
+    setTimeout(() => {
+      api('listerClassement').then(raw => {
+        const cl = typeof raw === 'string' ? JSON.parse(raw || '[]') : (Array.isArray(raw) ? raw : []);
+        S.data.classement = cl;
+        const el = document.getElementById('top5Home');
+        if (el) el.outerHTML = renderTop5Home(cl);
+      }).catch(() => {});
+    }, 0);
   } catch(e) {
     localStorage.removeItem('at_token');
     setPage('login');
@@ -469,6 +478,8 @@ function renderHome() {
 
     </div>
 
+    <div id="top5Home"></div>
+
   </div>`;
 }
 
@@ -478,7 +489,8 @@ function renderHome() {
 async function loadClassement() {
   setPage('loading');
   try {
-    S.data.classement = await api('listerClassement');
+    const raw = await api('listerClassement');
+    S.data.classement = typeof raw === 'string' ? JSON.parse(raw || '[]') : (Array.isArray(raw) ? raw : []);
     setPage('classement');
   } catch(e) { setPage('home'); }
 }
