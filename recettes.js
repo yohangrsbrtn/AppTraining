@@ -41,15 +41,20 @@ function renderRecetteList() {
   }
 
   const rows = _rList.map(r => `
-    <div class="list-item" onclick="ouvrirRecette('${r.id}','${(r.nom||'').replace(/'/g,"\\'")}')">
-      <div class="list-icon">🍽️</div>
-      <div class="list-text"><div class="list-title">${esc(r.nom)}</div></div>
-      <div class="list-arrow" style="color:#f97316;">›</div>
+    <div onclick="ouvrirRecette('${r.id}','${(r.nom||'').replace(/'/g,"\\'")}') "
+      style="background:#1a1d29;border-radius:12px;display:flex;align-items:center;gap:14px;margin-bottom:8px;cursor:pointer;border-left:3px solid #f97316;padding:14px 14px 14px 14px;-webkit-tap-highlight-color:transparent;"
+      ontouchstart="this.style.opacity='.75'" ontouchend="this.style.opacity='1'">
+      <div style="font-size:26px;flex-shrink:0;">🍽️</div>
+      <div style="flex:1;min-width:0;font-size:14px;font-weight:600;color:#e8eaf0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(r.nom)}</div>
+      <div style="font-size:18px;color:#f97316;flex-shrink:0;">›</div>
     </div>`).join('');
 
   return `<div id="app">
-    ${renderHeader('Recettes', `${_rList.length} recette${_rList.length > 1 ? 's' : ''}`, false)}
-    <div class="page"><div class="card">${rows}</div></div>
+    ${renderHeader('Recettes', '', false)}
+    <div class="page">
+      <div style="font-size:11px;color:#8892a4;margin-bottom:14px;">${_rList.length} recette${_rList.length > 1 ? 's' : ''} disponible${_rList.length > 1 ? 's' : ''}</div>
+      ${rows}
+    </div>
     ${renderNavBar('recettes')}
   </div>`;
 }

@@ -54,27 +54,24 @@ function renderMesClients() {
   const clients = _mesClients || [];
 
   const rows = clients.map(c => {
-    const couleur = coachColor(c.id);
     const tier = typeof niveauToTier === 'function' ? niveauToTier(c.niveau || 1) : 'debutant';
-    const tc   = typeof getTierColors === 'function' ? getTierColors(tier) : { c1: couleur };
-    const sz   = 32;
     const titreDef = (c.titreActif && typeof TITRES_DEF !== 'undefined') ? TITRES_DEF.find(t => t.id === c.titreActif) : null;
-    const titreHtml = titreDef ? `<span style="font-size:10px;font-weight:700;color:${titreDef.c1};background:${titreDef.c1}22;border:1px solid ${titreDef.c1}44;border-radius:4px;padding:1px 5px;margin-left:6px;">${titreDef.icon} ${titreDef.nom}</span>` : '';
+    const titreBadge = titreDef ? `<span style="display:inline-flex;align-items:center;gap:3px;background:linear-gradient(90deg,${titreDef.c2}cc,${titreDef.c1}99);border:1px solid ${titreDef.c1}55;border-radius:5px;padding:1px 6px 1px 4px;font-size:9px;font-weight:700;color:#f0f2ff;margin-left:7px;vertical-align:middle;">${titreDef.icon} ${titreDef.nom}</span>` : '';
+    const connex = c.dernConnexion
+      ? `<div style="font-size:10px;color:#555e7a;margin-top:3px;white-space:nowrap;">${esc(c.dernConnexion)}</div>`
+      : `<div style="font-size:10px;color:#555e7a;margin-top:3px;">Jamais connecté</div>`;
 
     return `<div onclick="ouvrirClientDetail('${c.id}')"
-      style="background:#161b2e;border-radius:12px;border:1px solid ${couleur}33;
-        border-left:3px solid ${couleur};padding:14px;margin-bottom:10px;cursor:pointer;
-        display:flex;align-items:center;gap:12px;">
-      <div style="flex-shrink:0;">${typeof getBadgeSVG === 'function' ? getBadgeSVG(tier, sz, 'cl'+c.id) : ''}</div>
+      class="card" style="padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;cursor:pointer;-webkit-tap-highlight-color:transparent;"
+      ontouchstart="this.style.opacity='.75'" ontouchend="this.style.opacity='1'">
       <div style="flex:1;min-width:0;">
-        <div style="display:flex;align-items:center;flex-wrap:wrap;margin-bottom:3px;">
-          <span style="font-size:15px;font-weight:700;color:#f0f2ff;">${esc(c.nom)}</span>
-          ${titreHtml}
-        </div>
-        <div style="font-size:12px;color:${tc.c1};font-weight:600;">Niveau ${c.niveau || 1}</div>
-        ${c.dernConnexion ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">${esc(c.dernConnexion)}</div>` : ''}
+        <div style="font-size:15px;font-weight:700;color:#f0f2ff;white-space:nowrap;">${esc(c.nom)}${titreBadge}</div>
+        ${connex}
       </div>
-      <div style="color:var(--muted);font-size:18px;">›</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+        <div style="font-size:11px;font-weight:700;color:#8892a4;">Niv.&nbsp;${c.niveau || 1}</div>
+        ${typeof getBadgeSVG === 'function' ? getBadgeSVG(tier, 36, 'cl'+c.id) : ''}
+      </div>
     </div>`;
   });
 
@@ -82,7 +79,7 @@ function renderMesClients() {
     ${renderHeader('Mes clients', `${clients.length} client${clients.length > 1 ? 's' : ''}`, false)}
     <div class="page">
       ${rows.length ? rows.join('') : '<div class="empty"><div class="empty-icon">👥</div><div class="empty-text">Aucun client trouvé.</div></div>'}
-      <button class="btn-secondary" onclick="setPage('coach-home')" style="margin-top:8px;">← Retour</button>
+      <button class="btn-secondary" onclick="loadHome()" style="margin-top:8px;">← Mon accueil</button>
     </div>
   </div>`;
 }

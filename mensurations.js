@@ -101,26 +101,30 @@ function renderHistorique() {
     : '<div style="font-size:13px;color:var(--muted);text-align:center;padding:12px;">Aucune donnée sur cette période</div>';
 
   return `<div id="app">
-    ${renderHeader('Mensurations', '', false)}
+    ${renderHeader('Mes Mensurations', 'Ma progression', false)}
     <div class="page">
-      <button class="btn-blue" onclick="loadSaisieMensurations()" style="width:100%;margin-bottom:16px;">📏 Saisir mes mensurations</button>
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <button onclick="loadHome()" style="flex:1;background:#2d3142;color:#e8eaf0;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:600;cursor:pointer;">← Accueil</button>
+        <button onclick="loadSaisieMensurations()" style="flex:1;background:linear-gradient(135deg,#378ADD,#2260a8);color:#fff;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:600;cursor:pointer;">Saisir mensurations</button>
+      </div>
 
-      <div class="card" style="margin-bottom:12px;">
-        <div style="display:flex;gap:8px;align-items:flex-end;">
-          <div style="flex:1;">
-            <div class="field-label">DEPUIS</div>
-            <input type="date" id="mensDateDebut" value="${_mDateDebut}"
-              style="width:100%;padding:8px 6px;background:#0f1117;color:var(--text);border:1px solid var(--border);border-radius:8px;font-size:12px;"
-              onchange="onMensFiltre()">
-          </div>
-          <div style="flex:1;">
-            <div class="field-label">JUSQU'AU</div>
-            <input type="date" id="mensDateFin" value="${_mDateFin}"
-              style="width:100%;padding:8px 6px;background:#0f1117;color:var(--text);border:1px solid var(--border);border-radius:8px;font-size:12px;"
-              onchange="onMensFiltre()">
-          </div>
-          <button onclick="onMensTout()" style="background:#2d3142;border:none;border-radius:8px;color:var(--accent);padding:8px 10px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;">Tout</button>
+      <div style="display:flex;gap:8px;margin-bottom:12px;align-items:flex-end;">
+        <div style="flex:1;">
+          <div style="font-size:10px;color:#8892a4;text-transform:uppercase;margin-bottom:4px;">Depuis</div>
+          <input type="date" id="mensDateDebut" value="${_mDateDebut}"
+            style="width:100%;padding:8px 6px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:8px;font-size:12px;"
+            onchange="onMensFiltre()">
         </div>
+        <div style="flex:1;">
+          <div style="font-size:10px;color:#8892a4;text-transform:uppercase;margin-bottom:4px;">Jusqu'au</div>
+          <input type="date" id="mensDateFin" value="${_mDateFin}"
+            style="width:100%;padding:8px 6px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:8px;font-size:12px;"
+            onchange="onMensFiltre()">
+        </div>
+        <button onclick="onMensTout()" id="btnToutePeriode"
+          style="background:#2d3142;border:none;border-radius:8px;color:${_mDateDebut ? '#8892a4' : '#378ADD'};padding:8px 10px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;">
+          Toute la<br>période
+        </button>
       </div>
 
       ${statsHtml}
