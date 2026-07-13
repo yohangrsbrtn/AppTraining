@@ -255,27 +255,40 @@ async function doLogin() {
 
 // ── Home ──────────────────────────────────────────────────────────────
 let _journeeData = null;
+let _homeLoad = 0;
 
 async function loadHome() {
+  const thisLoad = ++_homeLoad;
   setPage('loading');
   try {
-    const calls = [
+    const [prog, bilan] = await Promise.all([
       api('chargerProgressionClient'),
-      api('chargerBilan'),
-      api('chargerJourneeEnCours').catch(() => null),
-      api('listerClassement').catch(() => [])
-    ];
-    if (S.isCoach) calls.push(api('listerBilansCoach').catch(() => []));
-    const [prog, bilan, journee, classement, coachBilans] = await Promise.all(calls);
+      api('chargerBilan')
+    ]);
     S.data.prog  = prog;
     S.data.bilan = bilan;
-    _journeeData = journee;
-    S.data.classement = classement || [];
     if (S.isCoach) {
-      S.data.coachBilans = coachBilans || [];
-      S.data.coachBilansCount = (S.data.coachBilans).filter(b => !b.coachTraite).length;
+      try {
+        const bilans = await api('listerBilansCoach');
+        S.data.coachBilans = bilans;
+        S.data.coachBilansCount = (bilans || []).filter(b => !b.coachTraite).length;
+      } catch(e) { S.data.coachBilansCount = 0; }
     }
     setPage('home');
+    // Déclenché APRÈS chargerBilan (même spreadsheet — évite le conflit de verrou)
+    // Compteur thisLoad : ignore les callbacks périmés si l'utilisateur navigue entre-temps
+    api('chargerJourneeEnCours').then(j => {
+      if (_homeLoad !== thisLoad) return;
+      _journeeData = j;
+      const el = document.getElementById('carteJourneeHome');
+      if (el && el.parentNode) el.outerHTML = renderCarteJournee(j);
+    }).catch(() => {});
+    api('listerClassement').then(cl => {
+      if (_homeLoad !== thisLoad) return;
+      S.data.classement = cl;
+      const el = document.getElementById('top5Home');
+      if (el && el.parentNode) el.outerHTML = renderTop5Home(cl);
+    }).catch(() => {});
   } catch(e) {
     localStorage.removeItem('at_token');
     setPage('login');
