@@ -149,7 +149,7 @@ const S = {
   page: 'loading',
   client:  localStorage.getItem('at_client')  || '',
   token:   localStorage.getItem('at_token')   || '',
-  isCoach: localStorage.getItem('at_coach')   === '1',
+  isCoach: localStorage.getItem('at_coach') === '1' || localStorage.getItem('at_client') === 'yohan',
   data: {}
 };
 
