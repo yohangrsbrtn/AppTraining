@@ -14,3 +14,16 @@ async function api(action, params = {}) {
   if (!json.ok) throw new Error(json.error || 'erreur_api');
   return json.data;
 }
+
+// Pour le coach : même chose mais avec un client cible différent
+async function apiAs(action, clientId, params = {}) {
+  const body = { action, token: getToken(), client: clientId, params };
+  const res = await fetch(GAS_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify(body)
+  });
+  const json = await res.json();
+  if (!json.ok) throw new Error(json.error || 'erreur_api');
+  return json.data;
+}

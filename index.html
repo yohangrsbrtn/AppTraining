@@ -142,12 +142,14 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 <script src="recettes.js"></script>
 <script src="progression.js"></script>
 <script src="collection.js"></script>
+<script src="coach.js"></script>
 <script>
 // ── État global ───────────────────────────────────────────────────────
 const S = {
   page: 'loading',
-  client: localStorage.getItem('at_client') || '',
-  token:  localStorage.getItem('at_token')  || '',
+  client:  localStorage.getItem('at_client')  || '',
+  token:   localStorage.getItem('at_token')   || '',
+  isCoach: localStorage.getItem('at_coach')   === '1',
   data: {}
 };
 
@@ -179,10 +181,15 @@ function render() {
     case 'mens-loading':  document.body.innerHTML = renderMensurationsPage(); break;
     case 'recettes':
     case 'recettes-loading': document.body.innerHTML = renderRecettesPage(); break;
-    case 'classement':   app.innerHTML = renderClassement();    break;
-    case 'profil':       app.innerHTML = renderProfil();       break;
-    case 'progression':  document.body.innerHTML = renderProgressionPage(); break;
-    case 'collection':   document.body.innerHTML = renderCollectionPage();  break;
+    case 'classement':           app.innerHTML = renderClassement();           break;
+    case 'profil':               app.innerHTML = renderProfil();               break;
+    case 'progression':          document.body.innerHTML = renderProgressionPage();      break;
+    case 'collection':           document.body.innerHTML = renderCollectionPage();       break;
+    case 'coach-home':           document.body.innerHTML = renderCoachHome();            break;
+    case 'centre-bilans':        document.body.innerHTML = renderCentreBilans();         break;
+    case 'notifications-coach':  document.body.innerHTML = renderNotificationsCoach();   break;
+    case 'coach-bilan':          document.body.innerHTML = renderCoachBilan();           break;
+    case 'coach-mensurations':   document.body.innerHTML = renderCoachMensurations();    break;
   }
 }
 
@@ -231,8 +238,10 @@ async function doLogin() {
     if (!json.ok) throw new Error(json.error || 'Identifiants incorrects');
     localStorage.setItem('at_client', json.client);
     localStorage.setItem('at_token',  json.token);
-    S.client = json.client;
-    S.token  = json.token;
+    localStorage.setItem('at_coach',  json.coachMode ? '1' : '0');
+    S.client  = json.client;
+    S.token   = json.token;
+    S.isCoach = !!json.coachMode;
     await loadHome();
   } catch(e) {
     err.textContent = e.message === 'token_invalide' ? 'Identifiants incorrects.' : (e.message || 'Erreur de connexion.');
@@ -242,6 +251,7 @@ async function doLogin() {
 
 // ── Home ──────────────────────────────────────────────────────────────
 async function loadHome() {
+  if (S.isCoach) { await loadCoachHome(); return; }
   setPage('loading');
   try {
     const [prog, bilan] = await Promise.all([
@@ -416,7 +426,8 @@ function renderProfil() {
 function deconnexion() {
   localStorage.removeItem('at_token');
   localStorage.removeItem('at_client');
-  S.client = ''; S.token = ''; S.data = {};
+  localStorage.removeItem('at_coach');
+  S.client = ''; S.token = ''; S.isCoach = false; S.data = {};
   setPage('login');
 }
 
