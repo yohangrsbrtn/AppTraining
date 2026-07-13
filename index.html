@@ -259,30 +259,21 @@ let _journeeData = null;
 async function loadHome() {
   setPage('loading');
   try {
-    const [prog, bilan] = await Promise.all([
+    const calls = [
       api('chargerProgressionClient'),
-      api('chargerBilan')
-    ]);
+      api('chargerBilan'),
+      api('chargerJourneeEnCours').catch(() => null),
+      api('listerClassement').catch(() => [])
+    ];
+    if (S.isCoach) calls.push(api('listerBilansCoach').catch(() => []));
+    const [prog, bilan, journee, classement, coachBilans] = await Promise.all(calls);
     S.data.prog  = prog;
     S.data.bilan = bilan;
-    // Journée en cours (fire and forget — displayed once data arrives)
-    api('chargerJourneeEnCours').then(j => {
-      _journeeData = j;
-      const el = document.getElementById('carteJourneeHome');
-      if (el) el.outerHTML = renderCarteJournee(j);
-    }).catch(() => {});
-    // Top 5 (fire and forget)
-    api('listerClassement').then(cl => {
-      S.data.classement = cl;
-      const el = document.getElementById('top5Home');
-      if (el) el.outerHTML = renderTop5Home(cl);
-    }).catch(() => {});
+    _journeeData = journee;
+    S.data.classement = classement || [];
     if (S.isCoach) {
-      try {
-        const bilans = await api('listerBilansCoach');
-        S.data.coachBilans = bilans;
-        S.data.coachBilansCount = (bilans || []).filter(b => !b.coachTraite).length;
-      } catch(e) { S.data.coachBilansCount = 0; }
+      S.data.coachBilans = coachBilans || [];
+      S.data.coachBilansCount = (S.data.coachBilans).filter(b => !b.coachTraite).length;
     }
     setPage('home');
   } catch(e) {
