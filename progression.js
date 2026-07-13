@@ -26,9 +26,9 @@ function renderProgressionPage() {
   const tier = niveauToTier(niveau);
   const tc = getTierColors(tier);
   const sz = tier === 'legendaire' ? 72 : tier === 'diamant' ? 66 : tier === 'platine' ? 60 : 54;
-  const xpPct = p.pct || (p.xpNiveau && p.xpNiveauSuivant
-    ? Math.min(100, Math.round((p.xpNiveau / p.xpNiveauSuivant) * 100)) : 0);
-  const xpManquant = p.xpManquant != null ? p.xpManquant : ((p.xpNiveauSuivant || 100) - (p.xpNiveau || 0));
+  const xpPct = p.pct || 0;
+  const xpTotal = p.xpTotal || 0;
+  const xpManquant = p.xpManquant != null ? p.xpManquant : 10;
 
   const titreId = p.titreActif || ((() => { try { return localStorage.getItem('titreActif_' + S.client) || null; } catch(e) { return null; } })());
   const titreDef = titreId && typeof TITRES_DEF !== 'undefined' ? TITRES_DEF.find(t => t.id === titreId) : null;
@@ -52,7 +52,7 @@ function renderProgressionPage() {
             <div style="font-size:13px;color:${tc.c1};font-weight:600;letter-spacing:.5px;">NIVEAU ${niveau}</div>
             ${titreHtml}
             <div style="margin-top:12px;display:flex;justify-content:space-between;margin-bottom:5px;">
-              <span style="font-size:10px;color:#8892a4;">${(p.xpNiveau||0).toLocaleString('fr')} XP</span>
+              <span style="font-size:10px;color:#8892a4;">${xpTotal.toLocaleString('fr')} XP</span>
               <span style="font-size:10px;color:${tc.c1};font-weight:600;">${xpManquant.toLocaleString('fr')} XP → Niv. ${niveau+1}</span>
             </div>
             <div style="height:5px;background:#1e2235;border-radius:3px;overflow:hidden;">
@@ -63,30 +63,26 @@ function renderProgressionPage() {
       </div>
 
       <!-- Stats -->
-      <div class="stats-row">
-        <div style="background:linear-gradient(135deg,#0f1a10,#162a1a);border:1px solid #1D9E7555;border-radius:14px;padding:20px 12px;text-align:center;">
-          <div style="font-size:30px;margin-bottom:8px;">📋</div>
-          <div style="font-size:38px;font-weight:700;color:#1D9E75;line-height:1;">${p.nbBilansValides || 0}</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:8px;">Bilans validés</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;">
+        <div style="background:#0f1a10;border:1px solid #1D9E7544;border-radius:12px;padding:16px 8px;text-align:center;">
+          <div style="font-size:26px;margin-bottom:6px;">📋</div>
+          <div style="font-size:30px;font-weight:700;color:#1D9E75;line-height:1;">${p.bilansValidies || 0}</div>
+          <div style="font-size:10px;color:#8892a4;margin-top:6px;">Bilans</div>
         </div>
-        <div style="background:linear-gradient(135deg,#0a1220,#0f1e38);border:1px solid #378ADD55;border-radius:14px;padding:20px 12px;text-align:center;">
-          <div style="font-size:30px;margin-bottom:8px;">🏋️</div>
-          <div style="font-size:38px;font-weight:700;color:#378ADD;line-height:1;">${p.seancesValidees || 0}</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:8px;">Séances validées</div>
+        <div style="background:#0a1220;border:1px solid #4f8ef744;border-radius:12px;padding:16px 8px;text-align:center;">
+          <div style="font-size:26px;margin-bottom:6px;">🏋️</div>
+          <div style="font-size:30px;font-weight:700;color:#4f8ef7;line-height:1;">${p.seancesValidees || 0}</div>
+          <div style="font-size:10px;color:#8892a4;margin-top:6px;">Séances</div>
         </div>
-      </div>
-
-      <div style="background:linear-gradient(135deg,#0f1520,#151e30);border:1px solid var(--border);border-radius:14px;padding:18px;margin-bottom:12px;display:flex;align-items:center;gap:16px;">
-        <div style="font-size:36px;">🦶</div>
-        <div>
-          <div style="font-size:28px;font-weight:700;color:#f0f2ff;line-height:1;">${(p.pasTotal || 0).toLocaleString('fr')}</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:5px;">Pas cumulés</div>
+        <div style="background:#0f1520;border:1px solid #555e7a44;border-radius:12px;padding:16px 8px;text-align:center;">
+          <div style="font-size:26px;margin-bottom:6px;">🦶</div>
+          <div style="font-size:22px;font-weight:700;color:#e8eaf0;line-height:1;">${(p.pasTotal||0) >= 1000 ? ((p.pasTotal||0)/1000).toFixed(1)+'k' : (p.pasTotal||0)}</div>
+          <div style="font-size:10px;color:#8892a4;margin-top:6px;">Pas</div>
         </div>
       </div>
 
       <button class="btn-blue" onclick="loadCollection()" style="width:100%;margin-bottom:10px;">🏆 Ma collection</button>
-      <button class="btn-secondary" onclick="goTo('home')">← Retour</button>
+      <button class="btn-secondary" onclick="loadHome()">← Accueil</button>
     </div>
-    ${renderNavBar('home')}
   </div>`;
 }
