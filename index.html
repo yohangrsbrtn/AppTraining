@@ -255,10 +255,10 @@ async function doLogin() {
 
 // ── Home ──────────────────────────────────────────────────────────────
 let _journeeData = null;
-let _homeLoad = 0;
+let _journeeLoaded = false;
+let _classementLoaded = false;
 
 async function loadHome() {
-  const thisLoad = ++_homeLoad;
   setPage('loading');
   try {
     const [prog, bilan] = await Promise.all([
@@ -275,20 +275,24 @@ async function loadHome() {
       } catch(e) { S.data.coachBilansCount = 0; }
     }
     setPage('home');
-    // Déclenché APRÈS chargerBilan (même spreadsheet — évite le conflit de verrou)
-    // Compteur thisLoad : ignore les callbacks périmés si l'utilisateur navigue entre-temps
-    api('chargerJourneeEnCours').then(j => {
-      if (_homeLoad !== thisLoad) return;
-      _journeeData = j;
-      const el = document.getElementById('carteJourneeHome');
-      if (el && el.parentNode) el.outerHTML = renderCarteJournee(j);
-    }).catch(() => {});
-    api('listerClassement').then(cl => {
-      if (_homeLoad !== thisLoad) return;
-      S.data.classement = cl;
-      const el = document.getElementById('top5Home');
-      if (el && el.parentNode) el.outerHTML = renderTop5Home(cl);
-    }).catch(() => {});
+    // Journée et classement : chargés une seule fois par session (cache ensuite)
+    // Évite l'accumulation de requêtes GAS qui sature les connexions iOS Safari
+    if (!_journeeLoaded) {
+      _journeeLoaded = true;
+      api('chargerJourneeEnCours').then(j => {
+        _journeeData = j;
+        const el = document.getElementById('carteJourneeHome');
+        if (el && el.parentNode) el.outerHTML = renderCarteJournee(j);
+      }).catch(() => {});
+    }
+    if (!_classementLoaded) {
+      _classementLoaded = true;
+      api('listerClassement').then(cl => {
+        S.data.classement = cl;
+        const el = document.getElementById('top5Home');
+        if (el && el.parentNode) el.outerHTML = renderTop5Home(cl);
+      }).catch(() => {});
+    }
   } catch(e) {
     localStorage.removeItem('at_token');
     setPage('login');
