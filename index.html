@@ -140,6 +140,8 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 <script src="diete.js"></script>
 <script src="mensurations.js"></script>
 <script src="recettes.js"></script>
+<script src="progression.js"></script>
+<script src="collection.js"></script>
 <script>
 // ── État global ───────────────────────────────────────────────────────
 const S = {
@@ -177,8 +179,10 @@ function render() {
     case 'mens-loading':  document.body.innerHTML = renderMensurationsPage(); break;
     case 'recettes':
     case 'recettes-loading': document.body.innerHTML = renderRecettesPage(); break;
-    case 'classement':    app.innerHTML = renderClassement(); break;
-    case 'profil':        app.innerHTML = renderProfil();  break;
+    case 'classement':   app.innerHTML = renderClassement();    break;
+    case 'profil':       app.innerHTML = renderProfil();       break;
+    case 'progression':  document.body.innerHTML = renderProgressionPage(); break;
+    case 'collection':   document.body.innerHTML = renderCollectionPage();  break;
   }
 }
 
@@ -300,8 +304,18 @@ function renderHome() {
           <div class="list-text"><div class="list-title">Mon programme</div></div>
           <div class="list-arrow">›</div>
         </div>
-        <div class="list-item" onclick="goTo('classement')">
+        <div class="list-item" onclick="goTo('progression')">
+          <div class="list-icon">📈</div>
+          <div class="list-text"><div class="list-title">Ma progression</div></div>
+          <div class="list-arrow">›</div>
+        </div>
+        <div class="list-item" onclick="goTo('collection')">
           <div class="list-icon">🏆</div>
+          <div class="list-text"><div class="list-title">Ma collection</div></div>
+          <div class="list-arrow">›</div>
+        </div>
+        <div class="list-item" onclick="goTo('classement')">
+          <div class="list-icon">🥇</div>
           <div class="list-text"><div class="list-title">Classement</div></div>
           <div class="list-arrow">›</div>
         </div>
@@ -415,7 +429,9 @@ function goTo(page) {
   else if (page === 'diete')         loadDiete();
   else if (page === 'mensurations')  loadMensurations();
   else if (page === 'recettes')      loadRecettes();
-  else if (page === 'classement') loadClassement();
+  else if (page === 'classement')   loadClassement();
+  else if (page === 'progression')  loadProgression();
+  else if (page === 'collection')   loadCollection();
   else setPage(page);
 }
 

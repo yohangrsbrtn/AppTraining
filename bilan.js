@@ -128,8 +128,8 @@ function renderBilanDetail(data, modeHistorique, isSemainePrecedente) {
   // Bouton retour semaine en cours depuis précédent
   if (isSemainePrecedente) {
     html += `<button class="btn-secondary" onclick="loadBilan()">← Semaine en cours</button>`;
-  } else if (!modeHistorique && _prevMeta) {
-    html += `<button class="btn-secondary" onclick="loadBilanPrecedent()">← Semaine précédente</button>`;
+  } else if (!modeHistorique) {
+    html += `<button class="btn-secondary" onclick="loadHistoriqueBilans()">📅 Historique des bilans</button>`;
   }
 
   // ── Alimentation
