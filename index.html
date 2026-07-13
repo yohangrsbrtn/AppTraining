@@ -392,6 +392,23 @@ function renderHome() {
       </div>
     </div>
 
+    <div onclick="ouvrirJourneeModal()"
+      ontouchstart="this.style.opacity='.8'" ontouchend="this.style.opacity='1'"
+      style="background:#161b2e;border-radius:12px;border-left:3px solid #378ADD;border:1px solid #378ADD33;border-left:3px solid #378ADD;padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:14px;cursor:pointer;-webkit-tap-highlight-color:transparent;"
+      id="carteJourneeHome">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:10px;font-weight:700;color:#555e7a;text-transform:uppercase;letter-spacing:1px;margin-bottom:2px;">Journée en cours</div>
+        <div id="journeeHomeLabel" style="font-size:15px;font-weight:700;color:#f0f2ff;margin-bottom:8px;">Appuyer pour charger</div>
+        <div id="journeeHomeStatuts" style="display:flex;gap:12px;">
+          <span style="font-size:12px;color:#555e7a;font-weight:700;">🥗—</span>
+          <span style="font-size:12px;color:#555e7a;font-weight:600;">👟—</span>
+          <span style="font-size:12px;color:#555e7a;font-weight:700;">🏋—</span>
+          <span style="font-size:12px;color:#555e7a;font-weight:700;">🏃—</span>
+        </div>
+      </div>
+      <div style="background:linear-gradient(135deg,#378ADD,#1a5ba0);color:#fff;font-size:12px;font-weight:700;padding:8px 12px;border-radius:8px;white-space:nowrap;flex-shrink:0;">Valider ↗</div>
+    </div>
+
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
 
       <div onclick="goTo('training')" ontouchstart="this.style.background='#242838'" ontouchend="this.style.background='#1a1d29'" style="background:#1a1d29;border-radius:12px;padding:18px 14px;text-align:center;cursor:pointer;border-top:3px solid #4f8ef7;-webkit-tap-highlight-color:transparent;">
@@ -589,13 +606,53 @@ function envoyerBugReport() {
 
 // ── Journée en cours modal ────────────────────────────────────────────
 async function ouvrirJourneeModal() {
-  if (!_journeeData || _journeeData.aucun || _journeeData.valide) return;
-  // Rafraîchir les données de la ligne connue
+  // Chargement à la demande (1ère ouverture)
+  if (!_journeeData) {
+    const carte = document.getElementById('carteJourneeHome');
+    if (carte) { const lbl = document.getElementById('journeeHomeLabel'); if (lbl) lbl.textContent = 'Chargement…'; }
+    try {
+      _journeeData = await api('chargerJourneeEnCours');
+    } catch(e) {
+      const lbl = document.getElementById('journeeHomeLabel');
+      if (lbl) lbl.textContent = 'Appuyer pour charger';
+      return;
+    }
+    _majCarteJournee();
+  }
+  if (!_journeeData || _journeeData.aucun) return;
+  if (_journeeData.valide) return; // déjà validée, la carte l'affiche
+  // Rafraîchir les valeurs de la ligne
   try {
     const fresh = await api('chargerDonneesJournee', { ligne: _journeeData.ligne });
     if (fresh) { _journeeData.diete = fresh.diete; _journeeData.steps = fresh.steps; _journeeData.training = fresh.training; _journeeData.cardio = fresh.cardio; }
   } catch(e) {}
   _afficherModalJournee();
+}
+
+function _majCarteJournee() {
+  const d = _journeeData;
+  const lbl = document.getElementById('journeeHomeLabel');
+  const statuts = document.getElementById('journeeHomeStatuts');
+  const btn = document.querySelector('#carteJourneeHome > div:last-child');
+  if (!d || d.aucun) return;
+  const JOURS = ['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
+  const jourNom = JOURS[new Date(Date.now() - 2*3600*1000).getDay()];
+  const col = on => on ? '#1D9E75' : '#555e7a';
+  const steps = d.steps !== '' && d.steps != null
+    ? (parseInt(d.steps) >= 1000 ? Math.round(parseInt(d.steps)/100)/10 + 'k' : d.steps) : '—';
+  const carte = document.getElementById('carteJourneeHome');
+  if (d.valide) {
+    if (carte) { carte.style.borderLeftColor = '#1D9E75'; carte.style.borderColor = '#1D9E7533'; carte.style.borderLeftColor = '#1D9E75'; carte.onclick = null; carte.style.cursor = 'default'; }
+    if (lbl) { lbl.textContent = '✓ Journée validée'; lbl.style.color = '#1D9E75'; }
+    if (btn) btn.style.display = 'none';
+  } else {
+    if (lbl) { lbl.textContent = jourNom; lbl.style.color = '#f0f2ff'; }
+  }
+  if (statuts) statuts.innerHTML =
+    `<span style="font-size:12px;color:${col(d.diete)};font-weight:700;">🥗${d.diete?'✓':'—'}</span>` +
+    `<span style="font-size:12px;color:#8892a4;font-weight:600;">👟${steps}</span>` +
+    `<span style="font-size:12px;color:${col(d.training)};font-weight:700;">🏋${d.training?'✓':'—'}</span>` +
+    `<span style="font-size:12px;color:${col(d.cardio)};font-weight:700;">🏃${d.cardio?'✓':'—'}</span>`;
 }
 
 function _afficherModalJournee() {
@@ -659,9 +716,7 @@ async function validerJourneeClient() {
     _journeeData.valide = true;
     const modal = document.getElementById('modalJournee');
     if (modal) modal.remove();
-    // Mettre à jour la carte
-    const el = document.getElementById('carteJourneeHome');
-    if (el) el.outerHTML = renderCarteJournee(_journeeData);
+    _majCarteJournee();
   } catch(e) {
     if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.textContent = '✅ Valider ma journée'; }
     alert('Erreur lors de la validation.');
