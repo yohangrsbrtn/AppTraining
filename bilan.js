@@ -122,6 +122,7 @@ async function envoyerDepuisHistorique(ligneTitre, btn) {
       const bonus = res && res.bonusPonctualite > 0;
       showToast(bonus ? '📤 Bilan envoyé au coach ! +20 XP ⏱️' : '📤 Bilan envoyé au coach !', bonus ? null : '#1a5ba0');
       setPage('bilan');
+      if (bonus) setTimeout(() => rafraichirProgressionEtDeblocages(), 300);
     } catch(e) {
       if (btn) { btn.disabled = false; btn.textContent = '📤 Envoyer'; }
       showToast('Erreur : ' + e.message, '#c0392b');
@@ -338,6 +339,7 @@ async function envoyerBilanAuCoachConfirme(ligneTitre, btn) {
     if (_bilanData) _bilanData.dejaEnvoye = true;
     const bonus = res && res.bonusPonctualite > 0;
     showToast(bonus ? '📤 Bilan envoyé au coach ! +20 XP ⏱️' : '📤 Bilan envoyé au coach !', bonus ? null : '#1a5ba0');
+    if (bonus) setTimeout(() => rafraichirProgressionEtDeblocages(), 300);
   } catch(e) {
     if (btn) { btn.disabled = false; btn.textContent = '📤 Envoyer au coach'; }
     showToast('Erreur : ' + e.message, '#c0392b');

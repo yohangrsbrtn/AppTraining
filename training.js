@@ -74,9 +74,9 @@ function renderTrainingSelector() {
   let bandHtml = '';
   if (infos.seancesCibles || infos.stepsCibles || hasCardio) {
     bandHtml = `<div class="card" style="display:flex;justify-content:space-around;padding:12px 8px;margin-bottom:12px;">
-      ${infos.seancesCibles ? `<div style="text-align:center;"><div style="font-size:20px;">💪</div><div style="font-size:14px;font-weight:700;color:var(--accent);">${infos.seancesCibles}</div><div style="font-size:10px;color:var(--muted);">séances/sem</div></div>` : ''}
-      ${infos.stepsCibles ? `<div style="width:1px;background:var(--border);"></div><div style="text-align:center;"><div style="font-size:20px;">🦶</div><div style="font-size:14px;font-weight:700;color:var(--green);">${infos.stepsCibles}</div><div style="font-size:10px;color:var(--muted);">pas/jour</div></div>` : ''}
-      ${hasCardio ? `<div style="width:1px;background:var(--border);"></div><div style="text-align:center;"><div style="font-size:20px;">🏃</div><div style="font-size:14px;font-weight:700;color:#f59e0b;">${infos.cardio}</div><div style="font-size:10px;color:var(--muted);">cardio</div></div>` : ''}
+      ${infos.seancesCibles ? `<div style="text-align:center;"><div style="font-size:14px;font-weight:700;color:var(--accent);">${infos.seancesCibles}</div><div style="font-size:10px;color:var(--muted);">séances/sem</div></div>` : ''}
+      ${infos.stepsCibles ? `<div style="width:1px;background:var(--border);"></div><div style="text-align:center;"><div style="font-size:14px;font-weight:700;color:var(--green);">${infos.stepsCibles}</div><div style="font-size:10px;color:var(--muted);">pas/jour</div></div>` : ''}
+      ${hasCardio ? `<div style="width:1px;background:var(--border);"></div><div style="text-align:center;"><div style="font-size:14px;font-weight:700;color:#f59e0b;">${infos.cardio}</div><div style="font-size:10px;color:var(--muted);">cardio</div></div>` : ''}
     </div>`;
   }
 
