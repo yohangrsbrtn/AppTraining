@@ -59,6 +59,13 @@ async function loadCollection() {
       if (_colTitreActif === '') _colTitreActif = null;
     } catch(e) {}
     setPage('collection');
+    // Marquer tous les titres/emblèmes débloqués comme vus (retire le badge "🆕" sur Progression)
+    const p = S.data.prog || {};
+    const pt = p.pasTotal || 0, nb = p.bilansValidies || 0;
+    const totalDebloques = TITRES_DEF.filter(b => (b.cat==='pas'?pt:b.cat==='bilan'?nb:b.cat==='seance'?(p.seancesValidees||0):(p.niveau||0)) >= b.seuil).length;
+    try { localStorage.setItem('seenTitres_' + S.client, totalDebloques); } catch(e) {}
+    p.seenTitres = totalDebloques;
+    api('sauvegarderSeenTitres', { count: totalDebloques }).catch(() => {});
   } catch(e) { setPage('home'); }
 }
 

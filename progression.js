@@ -81,7 +81,18 @@ function renderProgressionPage() {
         </div>
       </div>
 
-      <button class="btn-blue" onclick="loadCollection()" style="width:100%;margin-bottom:10px;">🏆 Ma collection</button>
+      <button class="btn-blue" onclick="loadCollection()" style="width:100%;margin-bottom:10px;position:relative;">
+        🏆 Ma collection
+        ${(() => {
+          if (typeof TITRES_DEF === 'undefined') return '';
+          const pt = p.pasTotal || 0, nb = p.bilansValidies || 0;
+          const debloques = TITRES_DEF.filter(b => (b.cat==='pas'?pt:b.cat==='bilan'?nb:b.cat==='seance'?(p.seancesValidees||0):(p.niveau||0)) >= b.seuil).length;
+          let seen = p.seenTitres != null ? p.seenTitres : 0;
+          try { const ls = parseInt(localStorage.getItem('seenTitres_' + S.client)); if (!isNaN(ls) && ls > seen) seen = ls; } catch(e) {}
+          const nouveaux = Math.max(0, debloques - seen);
+          return nouveaux > 0 ? `<span style="position:absolute;top:-8px;right:-8px;background:#f0a500;color:#1a0e00;font-size:11px;font-weight:700;border-radius:10px;padding:2px 8px;">🆕 ${nouveaux}</span>` : '';
+        })()}
+      </button>
       <button class="btn-secondary" onclick="loadHome()">← Accueil</button>
     </div>
   </div>`;
