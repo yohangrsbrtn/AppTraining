@@ -287,15 +287,24 @@ function sauverStepsBilan(ligne, val) {
 }
 
 async function doEnvoyerBilanAuCoach(ligneTitre, btn) {
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Vérification...'; }
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Envoi...'; }
   try {
-    const check = await api('verifierMensurationsBilan', { ligneTitre });
-    if (!check || !check.ok) {
+    const retard = await api('verifierRetardBilan').catch(() => null);
+    if (retard && retard.enRetard) {
       if (btn) { btn.disabled = false; btn.textContent = '📤 Envoyer au coach'; }
-      showToast((check && check.message) ? check.message : 'Renseigne tes mensurations avant d\'envoyer ton bilan.', '#c0392b');
+      afficherAlerteRetardBilan(() => envoyerBilanAuCoachConfirme(ligneTitre, btn));
       return;
     }
-    if (btn) btn.textContent = '⏳ Envoi...';
+    await envoyerBilanAuCoachConfirme(ligneTitre, btn);
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = '📤 Envoyer au coach'; }
+    showToast('Erreur : ' + e.message, '#c0392b');
+  }
+}
+
+async function envoyerBilanAuCoachConfirme(ligneTitre, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Envoi...'; }
+  try {
     const res = await api('envoyerBilanAuCoach', { ligneTitre });
     if (btn) { btn.className = 'btn-disabled'; btn.textContent = '✅ Envoyé au coach'; }
     if (_bilanData) _bilanData.dejaEnvoye = true;
@@ -305,6 +314,22 @@ async function doEnvoyerBilanAuCoach(ligneTitre, btn) {
     if (btn) { btn.disabled = false; btn.textContent = '📤 Envoyer au coach'; }
     showToast('Erreur : ' + e.message, '#c0392b');
   }
+}
+
+function afficherAlerteRetardBilan(onConfirm) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9998;display:flex;align-items:center;justify-content:center;padding:24px;';
+  overlay.innerHTML = `<div style="background:linear-gradient(135deg,#f59e0b,#b45309);color:#fff;padding:28px 24px;border-radius:18px;font-size:15px;font-weight:600;text-align:center;max-width:340px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.5);">
+    <div style="font-size:36px;margin-bottom:12px;">😅</div>
+    <div style="font-size:16px;font-weight:700;margin-bottom:10px;">T'es à la bourre !</div>
+    <div style="font-size:14px;font-weight:400;line-height:1.5;margin-bottom:20px;">Ton coach va peut-être traiter ton bilan... ou peut-être pas 😜</div>
+    <button id="_retardOkBtn" style="background:#fff;color:#b45309;font-weight:700;font-size:15px;padding:12px 32px;border-radius:10px;margin:0;border:none;cursor:pointer;">OK</button>
+  </div>`;
+  document.body.appendChild(overlay);
+  document.getElementById('_retardOkBtn').addEventListener('click', () => {
+    overlay.remove();
+    onConfirm();
+  });
 }
 
 function ouvrirRecapBilan(ligneTitre) {
