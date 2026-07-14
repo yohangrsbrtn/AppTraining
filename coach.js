@@ -538,3 +538,49 @@ function renderCoachMensurations() {
     </div>
   </div>`;
 }
+
+// ── Rapports de bugs (coach) ──────────────────────────────────────────
+
+let _rapportsBugsData = null;
+
+async function loadRapportsBugs() {
+  setPage('loading');
+  try {
+    _rapportsBugsData = await api('chargerRapportsBugs');
+    setPage('rapports-bugs');
+    (_rapportsBugsData.bugs || []).filter(b => !b.lu).forEach(b => {
+      api('marquerBugLu', { ligne: b.ligne }).catch(() => {});
+    });
+    S.data.bugsNonLus = 0;
+  } catch(e) { setPage('home'); }
+}
+
+function renderRapportsBugs() {
+  const bugs = (_rapportsBugsData && _rapportsBugsData.bugs) || [];
+
+  let html = '';
+  if (!bugs.length) {
+    html = '<div class="empty"><div class="empty-icon">🐛</div><div class="empty-text">Aucun rapport pour l\'instant. 🎉</div></div>';
+  } else {
+    bugs.forEach(b => {
+      const couleur = coachColor(b.client);
+      const opacity = b.lu ? '0.6' : '1';
+      html += `<div class="card" style="margin-bottom:10px;border-left:3px solid ${couleur};padding-left:14px;opacity:${opacity};">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">
+          <div style="font-size:14px;font-weight:700;color:${couleur};">${esc(b.nom)} ${!b.lu ? '<span style="background:#e74c3c;color:#fff;font-size:10px;padding:2px 6px;border-radius:8px;margin-left:6px;">NEW</span>' : ''}</div>
+          <div style="font-size:11px;color:#8892a4;">${formatTsCoach(b.ts)}</div>
+        </div>
+        <div style="font-size:13px;color:#e8eaf0;white-space:pre-wrap;">${esc(b.message)}</div>
+      </div>`;
+    });
+  }
+
+  return `<div id="app">
+    ${renderHeader('Rapports de bugs', '', false)}
+    <div class="page">
+      ${html}
+      <button class="btn-secondary" onclick="loadRapportsBugs()" style="margin-bottom:8px;">↻ Rafraîchir</button>
+      <button class="btn-secondary" onclick="loadHome()">← Retour</button>
+    </div>
+  </div>`;
+}
