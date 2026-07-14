@@ -85,15 +85,21 @@ function renderHistoriqueList() {
   const hist = S.data.historiqueBilans || [];
   const rows = hist.length === 0
     ? `<div class="empty"><div class="empty-text">Aucun bilan clôturé pour l'instant.</div></div>`
-    : hist.map(b => `
+    : hist.map(b => {
+        const btnEnvoyer = !b.dejaEnvoye
+          ? `<button onclick="event.stopPropagation();envoyerDepuisHistorique(${b.ligneTitre}, this)" style="background:linear-gradient(135deg,#378ADD,#1a5ba0);color:#fff;border:none;font-size:12px;padding:6px 12px;border-radius:8px;margin:0;white-space:nowrap;cursor:pointer;flex-shrink:0;">📤 Envoyer</button>`
+          : `<span style="font-size:11px;color:#1D9E75;font-weight:600;white-space:nowrap;flex-shrink:0;">✅ Envoyé</span>`;
+        return `
       <div class="list-item" onclick="loadBilanHistorique(${b.ligneTitre})">
         <div class="list-icon">📋</div>
-        <div class="list-text">
+        <div class="list-text" style="flex:1;min-width:0;">
           <div class="list-title">${b.semaine || 'Bilan'}</div>
           <div class="list-sub">Validé le ${formatDateBilanFR(b.date)}</div>
         </div>
+        ${btnEnvoyer}
         <div class="list-arrow">›</div>
-      </div>`).join('');
+      </div>`;
+      }).join('');
 
   return `<div id="app">
     ${renderHeader('Historique', '', false)}
@@ -103,6 +109,36 @@ function renderHistoriqueList() {
     </div>
     ${renderNavBar('bilan')}
   </div>`;
+}
+
+async function envoyerDepuisHistorique(ligneTitre, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Envoi...'; }
+  const finaliser = async () => {
+    try {
+      const res = await api('envoyerBilanAuCoach', { ligneTitre });
+      const hist = S.data.historiqueBilans || [];
+      const item = hist.find(b => b.ligneTitre === ligneTitre);
+      if (item) item.dejaEnvoye = true;
+      const bonus = res && res.bonusPonctualite > 0;
+      showToast(bonus ? '📤 Bilan envoyé au coach ! +20 XP ⏱️' : '📤 Bilan envoyé au coach !', bonus ? null : '#1a5ba0');
+      setPage('bilan');
+    } catch(e) {
+      if (btn) { btn.disabled = false; btn.textContent = '📤 Envoyer'; }
+      showToast('Erreur : ' + e.message, '#c0392b');
+    }
+  };
+  try {
+    const retard = await api('verifierRetardBilan').catch(() => null);
+    if (retard && retard.enRetard) {
+      if (btn) { btn.disabled = false; btn.textContent = '📤 Envoyer'; }
+      afficherAlerteRetardBilan(finaliser);
+      return;
+    }
+    await finaliser();
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = '📤 Envoyer'; }
+    showToast('Erreur : ' + e.message, '#c0392b');
+  }
 }
 
 function renderBilanDetail(data, modeHistorique, isSemainePrecedente) {
@@ -171,7 +207,7 @@ function renderBilanDetail(data, modeHistorique, isSemainePrecedente) {
         </div>
         <div>
           <div class="field-label">STEPS</div>
-          <input class="bilan-input" type="text" inputmode="numeric" value="${fmtFR(j.steps)}" placeholder="0"
+          <input class="bilan-input" id="step_${j.ligne}" type="text" inputmode="numeric" value="${fmtFR(j.steps)}" placeholder="0"
             onchange="sauverStepsBilan(${j.ligne}, this.value)">
         </div>
       </div>
@@ -325,30 +361,98 @@ function afficherAlerteRetardBilan(onConfirm) {
 }
 
 function ouvrirRecapBilan(ligneTitre) {
-  // Affiche un résumé avant clôture
+  const data = _bilanData;
+  if (!data) { demanderConfirmationValidation(ligneTitre, null); return; }
+
+  let joursOk = 0;
+  (data.jours || []).forEach(j => {
+    const btn = document.getElementById('tog_diet_' + j.ligne);
+    if (btn && btn.dataset.val === 'true') joursOk++;
+  });
+  let totalSteps = 0;
+  (data.jours || []).forEach(j => {
+    const inp = document.getElementById('step_' + j.ligne);
+    const v = inp ? parseSteps(inp.value) : null;
+    if (v !== '' && v != null && !isNaN(Number(v)) && Number(v) > 0) totalSteps += Number(v);
+  });
+  const avgSteps = totalSteps > 0 ? Math.round(totalSteps / 7) : 0;
+  let joursTraining = 0;
+  (data.jours || []).forEach(j => {
+    const btn = document.getElementById('tog_train_' + j.ligne);
+    if (btn && btn.dataset.val === 'true') joursTraining++;
+  });
+  const seancesObjectif = data.seancesObjectif || 0;
+  const hasNote = _bilanNotes && Object.values(_bilanNotes).some(v => v > 0);
+  const fmtNum = n => n >= 1000 ? Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ') : Math.round(n).toString();
+  const statRow = (label, val, color) =>
+    `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid #2d3142;"><span style="font-size:14px;color:#8892a4;">${label}</span><span style="font-size:15px;font-weight:700;color:${color};">${val}</span></div>`;
+  const dietColor = joursOk >= 6 ? '#1D9E75' : joursOk >= 4 ? '#f0a500' : '#e05555';
+  const trainLabel = seancesObjectif > 0 ? joursTraining + '/' + seancesObjectif : joursTraining + '';
+  const trainColor = seancesObjectif > 0 ? (joursTraining >= seancesObjectif ? '#1D9E75' : joursTraining >= Math.ceil(seancesObjectif/2) ? '#f0a500' : '#e05555') : (joursTraining >= 3 ? '#1D9E75' : '#f0a500');
+  const statsHtml = (avgSteps > 0 ? statRow('Moyenne steps/jour', fmtNum(avgSteps), '#e8eaf0') : '')
+    + statRow('Diète tenue', joursOk + '/7', dietColor)
+    + (seancesObjectif > 0 ? statRow('Séances training', trainLabel, trainColor) : '');
+  const noteWarn = !hasNote ? `<div style="background:#332200;border:1px solid #f0a500;border-radius:10px;padding:12px 14px;margin:12px 0;font-size:13px;color:#f0c040;text-align:left;">⚠️ Aucune note repas renseignée. Tu as oublié de noter adhésion, digestion et appétit ?</div>` : '';
+
   const modal = document.createElement('div');
-  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;display:flex;align-items:flex-end;';
-  modal.innerHTML = `
-    <div style="background:#131629;border-radius:20px 20px 0 0;padding:24px;width:100%;padding-bottom:calc(24px + env(safe-area-inset-bottom));">
-      <div style="font-size:16px;font-weight:700;margin-bottom:8px;">🔒 Clôturer la semaine</div>
-      <div style="font-size:13px;color:#8892a4;margin-bottom:20px;">Une fois clôturé, ton bilan ne peut plus être re-clôturé. Tu pourras quand même modifier les données.</div>
-      <button onclick="confirmerCloture(${ligneTitre})" class="btn-green" style="width:100%;margin-bottom:10px;">✅ Confirmer la clôture</button>
-      <button onclick="this.closest('[style*=fixed]').remove()" class="btn-secondary" style="width:100%;">Annuler</button>
-    </div>`;
+  modal.id = 'recap-bilan-modal';
+  modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;z-index:9999;opacity:0;transition:opacity 0.3s;';
+  modal.innerHTML = `<div style="background:#1a1d29;border-radius:20px;padding:28px 22px;text-align:center;max-width:320px;width:88%;box-shadow:0 20px 60px rgba(0,0,0,0.5);transform:scale(0.85);transition:transform 0.3s;">
+    <div style="font-size:19px;font-weight:700;color:#e8eaf0;margin-bottom:3px;">Récap de ta semaine</div>
+    <div style="font-size:12px;color:#8892a4;margin-bottom:16px;">${esc(data.semaine || '')}</div>
+    <div style="background:#0f1117;border-radius:12px;padding:4px 14px;margin-bottom:10px;">${statsHtml}</div>
+    ${noteWarn}
+    <div style="display:flex;gap:10px;margin-top:16px;">
+      <button onclick="document.getElementById('recap-bilan-modal').remove();" style="flex:1;background:#2d3142;margin:0;padding:12px;font-size:14px;border:none;border-radius:10px;color:#e8eaf0;cursor:pointer;">Modifier</button>
+      <button onclick="demanderConfirmationValidation(${ligneTitre}, document.getElementById('recap-bilan-modal'));" style="flex:1;background:linear-gradient(135deg,#1D9E75,#167a5a);margin:0;padding:12px;font-size:14px;font-weight:700;border:none;border-radius:10px;color:#fff;cursor:pointer;">Clôturer ✓</button>
+    </div>
+  </div>`;
   document.body.appendChild(modal);
+  requestAnimationFrame(() => {
+    modal.style.opacity = '1';
+    modal.querySelector('div').style.transform = 'scale(1)';
+  });
+}
+
+function demanderConfirmationValidation(ligneTitre, modalEl) {
+  if (!modalEl) {
+    // Pas de _bilanData dispo (fallback rare) : on ouvre directement une modale de confirmation
+    modalEl = document.createElement('div');
+    modalEl.id = 'recap-bilan-modal';
+    modalEl.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;z-index:9999;';
+    modalEl.innerHTML = '<div style="background:#1a1d29;border-radius:20px;padding:28px 22px;text-align:center;max-width:320px;width:88%;"></div>';
+    document.body.appendChild(modalEl);
+  }
+  const inner = modalEl.querySelector('div');
+  if (!inner) return;
+  inner.innerHTML = `
+    <div style="font-size:32px;margin-bottom:12px;">⚠️</div>
+    <div style="font-size:17px;font-weight:700;color:#e8eaf0;margin-bottom:10px;">Valider le bilan</div>
+    <div style="font-size:13px;color:#8892a4;line-height:1.6;margin-bottom:20px;">Confirmer la validation de ton bilan de la semaine ?<br>Tu pourras toujours le modifier depuis l'historique.</div>
+    <div style="display:flex;gap:10px;">
+      <button onclick="document.getElementById('recap-bilan-modal').remove();" style="flex:1;background:#2d3142;margin:0;padding:12px;font-size:14px;border:none;border-radius:10px;color:#e8eaf0;cursor:pointer;">Annuler</button>
+      <button onclick="confirmerCloture(${ligneTitre});document.getElementById('recap-bilan-modal').remove();" style="flex:1;background:linear-gradient(135deg,#1D9E75,#167a5a);margin:0;padding:12px;font-size:14px;font-weight:700;border:none;border-radius:10px;color:#fff;cursor:pointer;">Confirmer ✓</button>
+    </div>`;
 }
 
 async function confirmerCloture(ligneTitre) {
-  document.querySelector('[style*="position:fixed;inset"]')?.remove();
   setPage('bilan-loading');
   try {
-    const result = await api('validerBilan', { ligneTitre, targetSunday: _bilanData?.targetSunday || null });
-    await loadBilan();
-    if (result && result.xp) {
-      afficherXPValidation(result);
-    } else {
-      showToast('✅ Bilan clôturé !', '#1D9E75');
+    // validerBilan renvoie une chaîne JSON.stringify côté serveur (contrairement à
+    // validerJournee/envoyerBilanAuCoach qui renvoient de vrais objets) — il faut la parser.
+    const raw = await api('validerBilan', { ligneTitre, targetSunday: _bilanData?.targetSunday || null });
+    const result = typeof raw === 'string' ? JSON.parse(raw) : (raw || { xp: 50 });
+    if (result.erreur === 'bilan_deja_valide') {
+      showToast('🚫 Tu as déjà validé un bilan cette semaine (lundi→dimanche).', '#c0392b');
+      await loadBilan();
+      return;
     }
+    await loadBilan();
+    if (result.nouveauNiveau && typeof verifierDeblocages === 'function') {
+      const p = S.data.prog || {};
+      verifierDeblocages(Object.assign({}, p, { niveau: result.nouveauNiveau }));
+    }
+    afficherXPValidation(result);
   } catch(e) {
     showToast('Erreur : ' + e.message, '#c0392b');
     setPage('bilan');
