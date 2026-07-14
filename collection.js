@@ -7,7 +7,7 @@ const BADGES_NIVEAU = [
   {seuil:30, tier:'or',         nom:'Or',         desc:'Une vraie machine de guerre'},
   {seuil:40, tier:'platine',    nom:'Platine',    desc:'L\'élite du coaching'},
   {seuil:50, tier:'diamant',    nom:'Diamant',    desc:'Au-delà des limites'},
-  {seuil:60, tier:'Légendaire', nom:'Légendaire', desc:'Statut mythique'}
+  {seuil:60, tier:'legendaire', nom:'Légendaire', desc:'Statut mythique'}
 ];
 
 function getBadgeSVG(tier, sz, sfx) {
