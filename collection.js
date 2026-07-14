@@ -87,25 +87,38 @@ function activerTitre(id) {
   setPage('collection');
 }
 
+const _COLLECTION_DESCS = {
+  debutant:   'Premier pas dans l\'aventure coaching',
+  bronze:     'Les bases sont posées, la machine tourne',
+  argent:     'La régularité commence à payer',
+  or:         'Une vraie machine de guerre',
+  platine:    'L\'élite du coaching — tu joues dans la cour des grands',
+  diamant:    'Au-delà des limites — niveau rare',
+  legendaire: 'Statut mythique — légende vivante'
+};
+
 function renderCollectionPage() {
   const p = S.data.prog || {};
   const niveauActuel = p.niveau || 1;
 
-  // ── Badges de niveau ──
+  // ── Emblèmes de niveau (identique au GAS : mêmes tailles, mêmes 4 lignes de texte)
+  const geoTiers = ['platine', 'diamant', 'legendaire'];
   const badgesHtml = `
-    <div class="section-title" style="color:var(--muted);">🏅 Badges de niveau</div>
-    <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:8px;">
+    <div class="section-title" style="color:var(--muted);">Emblèmes de niveau</div>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px;">
       ${BADGES_NIVEAU.map((b, i) => {
         const unlocked = niveauActuel >= b.seuil;
-        const sz = b.tier === 'legendaire' ? 70 : b.tier === 'diamant' ? 64 : b.tier === 'platine' ? 60 : 52;
-        return `<div style="flex:0 0 calc(50% - 5px);background:#161b2e;border-radius:14px;
-          border:1px solid ${unlocked ? '#2a3050' : '#161b2e'};padding:16px 12px;
-          display:flex;flex-direction:column;align-items:center;gap:8px;
-          opacity:${unlocked ? '1' : '0.45'};filter:${unlocked ? 'none' : 'grayscale(0.8)'};">
+        const geo = geoTiers.includes(b.tier);
+        const sz = b.tier === 'legendaire' ? 90 : b.tier === 'diamant' ? 84 : geo ? 78 : 70;
+        const cond = unlocked ? `✅ Débloqué au niveau ${b.seuil}` : `🔒 Atteindre le niveau ${b.seuil}`;
+        return `<div style="background:#161b2e;border-radius:14px;border:1px solid ${unlocked ? '#2a3050' : '#161b2e'};
+          padding:16px 12px;display:flex;flex-direction:column;align-items:center;gap:8px;
+          opacity:${unlocked ? '1' : '0.5'};filter:${unlocked ? 'none' : 'grayscale(0.8)'};flex:0 0 calc(50% - 5px);">
           ${getBadgeSVG(b.tier, sz, 'niv'+i)}
-          <div style="font-size:13px;font-weight:700;color:${unlocked ? '#f0f2ff' : '#555e7a'};">${b.nom}</div>
-          <div style="font-size:10px;color:#8892a4;">${unlocked ? '✅ Niveau ' + b.seuil : '🔒 Niveau ' + b.seuil}</div>
-          <div style="font-size:10px;color:${unlocked ? 'var(--green)' : 'var(--muted)'};text-align:center;line-height:1.4;">${b.desc}</div>
+          <div style="font-size:13px;font-weight:700;color:${unlocked ? '#f0f2ff' : '#555e7a'};margin-top:2px;">${b.nom}</div>
+          <div style="font-size:9px;color:#8892a4;">Niveau ${b.seuil}</div>
+          <div style="font-size:9px;color:${unlocked ? '#3ecf8e' : '#555e7a'};text-align:center;line-height:1.3;">${_COLLECTION_DESCS[b.tier] || b.desc}</div>
+          <div style="font-size:9px;color:${unlocked ? '#3ecf8e' : '#4f5a78'};font-weight:600;margin-top:2px;">${cond}</div>
         </div>`;
       }).join('')}
     </div>`;
@@ -120,35 +133,39 @@ function renderCollectionPage() {
       <div style="font-size:20px;font-weight:700;color:${actiDef.c1};">${actiDef.icon} ${actiDef.nom}</div>
     </div>` : '';
 
+  // ── Titres : dégradé sur l'icône, halo, léger lavis diagonal et bulles
+  // décoratives en fond — identique au GAS (afficherPageEmblemes/titresHTML)
   let html = '';
   cats.forEach(cat => {
     const titres = TITRES_DEF.filter(t => t.cat === cat);
     const val = _colVal(cat);
     html += `<div class="section-title" style="color:var(--muted);">${catLabels[cat]}</div>
-    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:8px;">`;
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px;">`;
     titres.forEach(t => {
       const unlocked = val >= t.seuil;
       const isActif  = _colTitreActif === t.id;
-      const pct = unlocked ? 100 : Math.min(99, Math.round((val / t.seuil) * 100));
+      const borderColor = unlocked ? (isActif ? t.c1 + '88' : '#2a3050') : '#1a1f35';
+      const borderTopColor = unlocked ? (isActif ? t.c1 : t.c1 + '55') : '#252d45';
+      const bulles = unlocked ? `<svg style="position:absolute;right:12px;top:50%;transform:translateY(-50%);opacity:0.07;pointer-events:none;" width="70" height="50" viewBox="0 0 70 50"><circle cx="10" cy="25" r="18" fill="${t.c1}"/><circle cx="40" cy="10" r="10" fill="${t.c1}"/><circle cx="60" cy="35" r="14" fill="${t.c1}"/></svg>` : '';
+      const indicateur = isActif
+        ? `<span style="font-size:10px;font-weight:700;color:#3ecf8e;background:#0d3a28;border:1px solid #1a5a38;padding:4px 9px;border-radius:6px;">● ACTIF</span>`
+        : unlocked ? `<span style="font-size:18px;color:#4f5a78;">›</span>` : `<span style="font-size:16px;">🔒</span>`;
       html += `<div onclick="${unlocked ? `activerTitre('${t.id}')` : ''}"
-        style="background:#161b2e;border-radius:12px;border:1.5px solid ${unlocked ? t.c1 + '55' : 'var(--border)'};
-          padding:14px;display:flex;align-items:center;gap:14px;
-          ${isActif ? `box-shadow:0 0 0 2.5px ${t.c1};` : ''}
-          opacity:${unlocked ? '1' : '0.5'};
-          ${unlocked ? 'cursor:pointer;' : ''}">
-        <div style="font-size:30px;width:38px;text-align:center;filter:${unlocked ? 'none' : 'grayscale(1)'};">${t.icon}</div>
-        <div style="flex:1;min-width:0;">
-          <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;flex-wrap:wrap;">
-            <div style="font-size:14px;font-weight:700;color:${unlocked ? '#e8eaf0' : 'var(--muted)'};">${t.nom}</div>
-            ${isActif ? `<span style="font-size:10px;font-weight:700;color:${t.c1};background:${t.c1}22;border:1px solid ${t.c1}55;border-radius:4px;padding:1px 5px;">ACTIF</span>` : ''}
+        style="background:#161b2e;border-radius:12px;border:1px solid ${borderColor};border-top:2px solid ${borderTopColor};
+          padding:14px 16px;position:relative;overflow:hidden;cursor:${unlocked?'pointer':'default'};
+          opacity:${unlocked?'1':'0.62'};margin-bottom:2px;-webkit-tap-highlight-color:transparent;">
+        <div style="position:absolute;top:0;left:0;right:0;bottom:0;background:linear-gradient(100deg,${t.c1}22 0%,transparent 55%);pointer-events:none;"></div>
+        ${bulles}
+        <div style="display:flex;align-items:center;gap:14px;position:relative;">
+          <div style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,${unlocked?t.c1+'cc':'#252d45'},${unlocked?t.c2:'#151b2e'});display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:${unlocked?'0 0 16px '+t.c1+'44':'none'};">
+            <span style="font-size:28px;line-height:1;opacity:${unlocked?'1':'0.35'};display:inline-block;">${t.icon}</span>
           </div>
-          <div style="font-size:11px;color:var(--muted);margin-bottom:6px;">${t.cond}</div>
-          <div style="background:var(--bg3);border-radius:99px;height:4px;overflow:hidden;">
-            <div style="height:100%;border-radius:99px;width:${pct}%;background:${unlocked ? t.c1 : 'var(--border)'};transition:width .6s;"></div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:16px;font-weight:700;color:${unlocked?'#f0f2ff':'#7a8499'};text-shadow:${unlocked?'0 0 14px '+t.c1+'44':'none'};">${t.nom}</div>
+            <div style="font-size:11px;color:${unlocked?t.c1+'cc':'#646e88'};margin-top:3px;">${t.cond}</div>
           </div>
-          ${!unlocked ? `<div style="font-size:10px;color:var(--muted);margin-top:3px;">${val.toLocaleString('fr')} / ${t.seuil.toLocaleString('fr')}</div>` : ''}
+          <div style="flex-shrink:0;">${indicateur}</div>
         </div>
-        <div style="font-size:18px;flex-shrink:0;">${unlocked ? (isActif ? '✓' : '○') : '🔒'}</div>
       </div>`;
     });
     html += `</div>`;
