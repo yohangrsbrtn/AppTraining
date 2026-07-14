@@ -73,9 +73,9 @@ function renderBilanComplet() {
     <div class="page">
       <div class="card" style="text-align:center;padding:32px;">
         <div style="font-size:40px;margin-bottom:12px;">✅</div>
-        <div style="font-size:16px;font-weight:700;">Tous tes bilans sont à jour !</div>
+        <div style="font-size:16px;font-weight:700;">Tous les bilans sont à jour !</div>
       </div>
-      <button class="btn-secondary" onclick="loadHistoriqueBilans()">📅 Voir les bilans précédents</button>
+      <button class="btn-secondary" onclick="loadHistoriqueBilans()">📅 Historique des bilans</button>
     </div>
     ${renderNavBar('bilan')}
   </div>`;
@@ -123,7 +123,8 @@ function renderBilanDetail(data, modeHistorique, isSemainePrecedente) {
   // Bandeau statut
   if (data.dejaValide && data.dateValidation) {
     const label = modeHistorique ? 'Validé le' : 'Bilan clôturé le';
-    html += `<div class="bilan-banner">${label} <strong>${formatDateBilanFR(data.dateValidation)}</strong></div>`;
+    const suffixe = modeHistorique ? 'modifiable, mais ne peut pas être revalidé' : 'modifiable, mais ne peut pas être reclôturé';
+    html += `<div class="bilan-banner">${label} <strong>${formatDateBilanFR(data.dateValidation)}</strong> — ${suffixe}</div>`;
   }
   // Bouton retour semaine en cours depuis précédent
   if (isSemainePrecedente) {
@@ -132,73 +133,71 @@ function renderBilanDetail(data, modeHistorique, isSemainePrecedente) {
     html += `<button class="btn-secondary" onclick="loadHistoriqueBilans()">📅 Historique des bilans</button>`;
   }
 
-  // ── Alimentation
+  // ── Alimentation (toujours modifiable, même clôturé/historique — seule la re-validation est bloquée)
   html += `<div class="section-title" style="color:#378ADD;">🍽️ Alimentation</div>`;
   (data.repas || []).forEach((r, idx) => {
     html += `<div class="card">
       <div style="font-size:14px;font-weight:600;margin-bottom:12px;">Repas N°${r.num}</div>
       <div class="field-label">ADHÉSION</div>
-      ${renderNotes(r.ligne, 6, 'r'+idx+'_adh', r.adhesion, data.dejaValide || modeHistorique)}
+      ${renderNotes(r.ligne, 6, 'r'+idx+'_adh', r.adhesion)}
       <div class="field-label" style="margin-top:8px;">DIGESTION</div>
-      ${renderNotes(r.ligne, 7, 'r'+idx+'_dig', r.digestion, data.dejaValide || modeHistorique)}
+      ${renderNotes(r.ligne, 7, 'r'+idx+'_dig', r.digestion)}
       <div class="field-label" style="margin-top:8px;">APPÉTIT</div>
-      ${renderNotes(r.ligne, 8, 'r'+idx+'_app', r.appetit, data.dejaValide || modeHistorique)}
+      ${renderNotes(r.ligne, 8, 'r'+idx+'_app', r.appetit)}
     </div>`;
   });
   html += `<div class="card">
     <div class="field-label">COMMENTAIRE ALIMENTATION</div>
     <textarea class="bilan-textarea" placeholder="Commentaire global..."
-      ${data.dejaValide || modeHistorique ? 'readonly' : `onchange="sauverBilan(${data.ligneTitre + 2}, 9, this.value)"`}
+      onchange="sauverBilan(${data.ligneTitre + 2}, 9, this.value)"
     >${esc(data.commentaireAlim)}</textarea>
   </div>`;
 
   // ── Semaine
   html += `<div class="section-title" style="color:#1D9E75;">📅 Semaine</div>`;
   (data.jours || []).forEach(j => {
-    const ro = data.dejaValide || modeHistorique;
     html += `<div class="card">
       <div style="font-size:14px;font-weight:600;margin-bottom:12px;">${j.nom}</div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
         <div>
           <div class="field-label">POIDS (kg)</div>
           <input class="bilan-input" type="text" inputmode="decimal" value="${fmtFR(j.poids)}" placeholder="—"
-            ${ro ? 'readonly' : `onchange="sauverBilan(${j.ligne}, 12, parsePoids(this.value))"`}>
+            onchange="sauverBilan(${j.ligne}, 12, parsePoids(this.value))">
         </div>
         <div>
           <div class="field-label">EAU (L)</div>
           <input class="bilan-input" type="text" inputmode="decimal" value="${fmtFR(j.eau)}" placeholder="—"
-            ${ro ? 'readonly' : `onchange="sauverBilan(${j.ligne}, 13, parseEau(this.value))"`}>
+            onchange="sauverBilan(${j.ligne}, 13, parseEau(this.value))">
         </div>
         <div>
           <div class="field-label">STEPS</div>
           <input class="bilan-input" type="text" inputmode="numeric" value="${fmtFR(j.steps)}" placeholder="0"
-            ${ro ? 'readonly' : `onchange="sauverStepsBilan(${j.ligne}, this.value)"`}>
+            onchange="sauverStepsBilan(${j.ligne}, this.value)">
         </div>
       </div>
       <div style="display:flex;gap:6px;">
-        ${renderToggle(j.ligne, 14, 'tog_diet_'+j.ligne, j.diete, 'Diète', ro)}
-        ${renderToggle(j.ligne, 18, 'tog_train_'+j.ligne, j.training, 'Training', ro)}
-        ${renderToggle(j.ligne, 19, 'tog_cardio_'+j.ligne, j.cardio, 'Cardio', ro)}
+        ${renderToggle(j.ligne, 14, 'tog_diet_'+j.ligne, j.diete, 'Diète')}
+        ${renderToggle(j.ligne, 18, 'tog_train_'+j.ligne, j.training, 'Training')}
+        ${renderToggle(j.ligne, 19, 'tog_cardio_'+j.ligne, j.cardio, 'Cardio')}
       </div>
     </div>`;
   });
 
   const ligneComJour = (data.jours && data.jours.length > 0) ? data.jours[0].ligne : data.ligneTitre + 2;
-  const ro2 = data.dejaValide || modeHistorique;
   html += `<div class="card">
     <div class="field-label">COMMENTAIRE SEMAINE</div>
     <textarea class="bilan-textarea" placeholder="Commentaire global..."
-      ${ro2 ? 'readonly' : `onchange="sauverBilan(${ligneComJour}, 15, this.value)"`}
+      onchange="sauverBilan(${ligneComJour}, 15, this.value)"
     >${esc(data.commentaireJour)}</textarea>
     <div class="field-label" style="margin-top:10px;">COMMENTAIRE ACTIVITÉ</div>
     <textarea class="bilan-textarea" placeholder="Commentaire activité..."
-      ${ro2 ? 'readonly' : `onchange="sauverBilan(${ligneComJour}, 20, this.value)"`}
+      onchange="sauverBilan(${ligneComJour}, 20, this.value)"
     >${esc(data.commentaireActivite)}</textarea>
   </div>`;
 
   // ── Boutons bas
   if (modeHistorique) {
-    html += `<button class="btn-secondary" onclick="loadHistoriqueBilans()">← Bilans précédents</button>`;
+    html += `<button class="btn-secondary" onclick="loadHistoriqueBilans()">📅 Historique des bilans</button>`;
   } else if (data.dejaValide) {
     const deja = !!data.dejaEnvoye;
     html += `<button id="btn-envoyer" onclick="doEnvoyerBilanAuCoach(${data.ligneTitre}, this)"
@@ -206,7 +205,7 @@ function renderBilanDetail(data, modeHistorique, isSemainePrecedente) {
       class="${deja ? 'btn-disabled' : 'btn-blue'}" style="width:100%;margin-top:4px;">
       ${deja ? '✅ Envoyé au coach' : '📤 Envoyer au coach'}
     </button>`;
-    html += `<button class="btn-secondary" onclick="loadHistoriqueBilans()" style="margin-top:8px;">📅 Voir les bilans précédents</button>`;
+    html += `<button class="btn-secondary" onclick="loadHistoriqueBilans()" style="margin-top:8px;">📅 Historique des bilans</button>`;
     if (isSemainePrecedente) {
       html += `<button class="btn-secondary" onclick="loadBilan()" style="margin-top:8px;">← Semaine en cours</button>`;
     }
@@ -220,7 +219,7 @@ function renderBilanDetail(data, modeHistorique, isSemainePrecedente) {
       </button>
       <button onclick="ouvrirRecapBilan(${data.ligneTitre})" class="btn-green" style="flex:1;margin:0;">🔒 Clôturer</button>
     </div>`;
-    html += `<button class="btn-secondary" onclick="loadHistoriqueBilans()" style="margin-top:8px;">📅 Voir les bilans précédents</button>`;
+    html += `<button class="btn-secondary" onclick="loadHistoriqueBilans()" style="margin-top:8px;">📅 Historique des bilans</button>`;
   }
 
   return `<div id="app">
@@ -232,25 +231,18 @@ function renderBilanDetail(data, modeHistorique, isSemainePrecedente) {
 
 // ── Composants ────────────────────────────────────────────────────────
 
-function renderNotes(ligne, col, groupeId, valActuelle, readOnly) {
+function renderNotes(ligne, col, groupeId, valActuelle) {
   let h = `<div style="display:flex;gap:4px;margin:3px 0;">`;
   for (let i = 1; i <= 5; i++) {
     const active = valActuelle === i;
-    if (readOnly) {
-      h += `<div style="flex:1;padding:8px 0;background:${active?'#378ADD':'#2d3142'};border-radius:6px;color:#e8eaf0;font-size:14px;font-weight:600;text-align:center;">${i}</div>`;
-    } else {
-      h += `<button id="${groupeId}_${i}" onclick="noterRepas(${ligne},${col},${i},'${groupeId}')"
-        style="flex:1;padding:8px 0;background:${active?'#378ADD':'#2d3142'};border:none;border-radius:6px;color:#e8eaf0;font-size:14px;font-weight:600;cursor:pointer;">${i}</button>`;
-    }
+    h += `<button id="${groupeId}_${i}" onclick="noterRepas(${ligne},${col},${i},'${groupeId}')"
+      style="flex:1;padding:8px 0;background:${active?'#378ADD':'#2d3142'};border:none;border-radius:6px;color:#e8eaf0;font-size:14px;font-weight:600;cursor:pointer;">${i}</button>`;
   }
   return h + '</div>';
 }
 
-function renderToggle(ligne, col, elemId, val, label, readOnly) {
+function renderToggle(ligne, col, elemId, val, label) {
   const on = val === true;
-  if (readOnly) {
-    return `<div style="flex:1;padding:10px 6px;background:${on?'#1D9E75':'#2d3142'};border-radius:8px;color:#e8eaf0;font-size:12px;font-weight:600;text-align:center;">${on?'✓ ':''}${label}</div>`;
-  }
   return `<button id="${elemId}" data-val="${on}" onclick="toggleBilan(${ligne},${col},'${elemId}')"
     style="flex:1;padding:10px 6px;background:${on?'#1D9E75':'#2d3142'};border:none;border-radius:8px;color:#e8eaf0;font-size:12px;font-weight:600;cursor:pointer;">
     ${on?'✓ ':''}${label}</button>`;

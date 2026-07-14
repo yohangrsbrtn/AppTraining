@@ -42,7 +42,6 @@ async function voirProgressionClient(clientId) {
   try {
     _clientProgData = await apiAs('chargerProgressionClient', clientId);
     _clientProgData._clientId = clientId;
-    _coachBilanRetour = 'client-detail';
     setPage('client-progression');
   } catch(e) {
     showToast('Erreur : ' + e.message, '#c0392b');
@@ -239,6 +238,18 @@ function renderCentreBilans() {
   const aTraiter = data.filter(b => !b.coachTraite);
   const traites  = data.filter(b =>  b.coachTraite);
 
+  if (data.length === 0) {
+    return `<div id="app">
+      ${renderHeader('Centre bilans', '', false)}
+      <div class="page">
+        <div class="empty">
+          <div class="empty-text">Aucun bilan reçu pour l'instant.<br><span style="font-size:12px;color:#555e7a;margin-top:8px;display:block;">Les bilans envoyés par tes clients apparaîtront ici.</span></div>
+        </div>
+        <button class="btn-secondary" onclick="loadHome()">← Retour</button>
+      </div>
+    </div>`;
+  }
+
   let html = '';
 
   // Stats
@@ -274,7 +285,7 @@ function renderCentreBilans() {
         <div style="display:flex;gap:8px;margin-bottom:8px;">
           <button onclick="voirBilanClient('${b.client}','${esc(b.nom)}')"
             style="flex:1;background:#1e2444;border:1px solid var(--border);color:#c8d0e0;font-size:13px;padding:9px;margin:0;border-radius:8px;cursor:pointer;">
-            👁 Voir bilan
+            👁 Bilan
           </button>
           <button onclick="voirMensurationsClient('${b.client}','${esc(b.nom)}')"
             style="flex:1;background:#1e2444;border:1px solid var(--border);color:#c8d0e0;font-size:13px;padding:9px;margin:0;border-radius:8px;cursor:pointer;">
@@ -405,140 +416,39 @@ function renderNotificationsCoach() {
   </div>`;
 }
 
-// ── Voir bilan client (coach) ─────────────────────────────────────────
+// ── Voir bilan / mensurations client (coach) ──────────────────────────
+// Comme en GAS : le coach "devient" temporairement le client (vue client)
+// pour voir/modifier son bilan ou ses mensurations avec exactement les
+// mêmes pages, le même comportement, et les mêmes droits d'édition.
+// "Retour coach" ramène à la page d'où on est parti (centre-bilans,
+// notifications-coach, ou client-detail).
 
-let _coachBilanData  = null;
-let _coachBilanNom   = '';
-let _coachBilanRetour = null;
-
-async function voirBilanClient(clientId, nom) {
-  _coachBilanNom    = nom || clientId;
-  _coachBilanRetour = S.page; // mémorise d'où on vient
-  setPage('loading');
-  try {
-    const hist = await apiAs('chargerHistoriqueBilans', clientId);
-    if (!hist || hist.length === 0) {
-      showToast('Aucun bilan clôturé pour ce client.', '#c0392b');
-      setPage(_coachBilanRetour);
-      return;
+function voirBilanClient(clientId, nom) {
+  const retour = S.page;
+  _clientSelectionne = { id: clientId, nom: nom || clientId };
+  enterVueClient(clientId, async () => {
+    // Comme en GAS (voirBilanDepuisNotif) : montre le DERNIER bilan clôturé/envoyé,
+    // pas le bilan de la semaine en cours (pas encore validé)
+    setPage('bilan-loading');
+    try {
+      const hist = await api('chargerHistoriqueBilans');
+      if (!hist || hist.length === 0) {
+        showToast('Aucun bilan clôturé pour ce client.', '#c0392b');
+        exitVueClient();
+        return;
+      }
+      await loadBilanHistorique(hist[0].ligneTitre);
+    } catch(e) {
+      showToast('Erreur : ' + e.message, '#c0392b');
+      exitVueClient();
     }
-    _coachBilanData = await apiAs('chargerBilanParLigne', clientId, { ligneTitre: hist[0].ligneTitre });
-    _coachBilanData._clientId = clientId;
-    setPage('coach-bilan');
-  } catch(e) {
-    showToast('Erreur : ' + e.message, '#c0392b');
-    setPage(_coachBilanRetour);
-  }
+  }, retour);
 }
 
-async function voirMensurationsClient(clientId, nom) {
-  _coachBilanNom    = nom || clientId;
-  _coachBilanRetour = S.page;
-  setPage('loading');
-  try {
-    const releves = await apiAs('chargerMensurations', clientId);
-    S.data._coachMens = { releves, clientId, nom: _coachBilanNom };
-    setPage('coach-mensurations');
-  } catch(e) {
-    showToast('Erreur : ' + e.message, '#c0392b');
-    setPage(_coachBilanRetour);
-  }
-}
-
-function renderCoachBilan() {
-  const data = _coachBilanData;
-  if (!data) return `<div id="app">${renderHeader('Bilan client','',false)}<div class="page"><div class="empty"><div class="empty-text">Aucune donnée</div></div></div></div>`;
-
-  let html = '';
-  if (data.dateValidation) {
-    html += `<div class="bilan-banner">Clôturé le <strong>${formatDateBilanFR(data.dateValidation)}</strong></div>`;
-  }
-  html += `<div style="font-size:13px;font-weight:600;color:var(--muted);margin-bottom:12px;">${esc(data.semaineLabel||'')}</div>`;
-
-  // Alimentation
-  html += `<div class="section-title" style="color:#378ADD;">🍽️ Alimentation</div>`;
-  (data.repas || []).forEach((r, idx) => {
-    html += `<div class="card">
-      <div style="font-size:14px;font-weight:600;margin-bottom:10px;">Repas N°${r.num}</div>
-      <div class="field-label">ADHÉSION</div>${renderNotes(r.ligne,6,'cba'+idx+'_adh',r.adhesion,true)}
-      <div class="field-label" style="margin-top:8px;">DIGESTION</div>${renderNotes(r.ligne,7,'cba'+idx+'_dig',r.digestion,true)}
-      <div class="field-label" style="margin-top:8px;">APPÉTIT</div>${renderNotes(r.ligne,8,'cba'+idx+'_app',r.appetit,true)}
-    </div>`;
-  });
-  html += `<div class="card"><div class="field-label">COMMENTAIRE ALIMENTATION</div>
-    <textarea class="bilan-textarea" readonly>${esc(data.commentaireAlim)}</textarea></div>`;
-
-  // Semaine
-  html += `<div class="section-title" style="color:#1D9E75;">📅 Semaine</div>`;
-  (data.jours || []).forEach(j => {
-    html += `<div class="card">
-      <div style="font-size:14px;font-weight:600;margin-bottom:10px;">${j.nom}</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">
-        <div><div class="field-label">POIDS</div><input class="bilan-input" readonly value="${fmtFR(j.poids)}" placeholder="—"></div>
-        <div><div class="field-label">EAU</div><input class="bilan-input" readonly value="${fmtFR(j.eau)}" placeholder="—"></div>
-        <div><div class="field-label">STEPS</div><input class="bilan-input" readonly value="${fmtFR(j.steps)}" placeholder="0"></div>
-      </div>
-      <div style="display:flex;gap:6px;">
-        ${renderToggle(j.ligne,14,'_cb_d'+j.ligne,j.diete,'Diète',true)}
-        ${renderToggle(j.ligne,18,'_cb_t'+j.ligne,j.training,'Training',true)}
-        ${renderToggle(j.ligne,19,'_cb_c'+j.ligne,j.cardio,'Cardio',true)}
-      </div>
-    </div>`;
-  });
-  const ligneComJour = (data.jours && data.jours.length > 0) ? data.jours[0].ligne : data.ligneTitre + 2;
-  html += `<div class="card">
-    <div class="field-label">COMMENTAIRE SEMAINE</div>
-    <textarea class="bilan-textarea" readonly>${esc(data.commentaireJour)}</textarea>
-    <div class="field-label" style="margin-top:10px;">COMMENTAIRE ACTIVITÉ</div>
-    <textarea class="bilan-textarea" readonly>${esc(data.commentaireActivite)}</textarea>
-  </div>`;
-
-  return `<div id="app">
-    ${renderHeader('Bilan · ' + esc(_coachBilanNom), '', false)}
-    <div class="page">
-      ${html}
-      <button class="btn-secondary" onclick="setPage(_coachBilanRetour||'centre-bilans')">← Retour</button>
-    </div>
-  </div>`;
-}
-
-function renderCoachMensurations() {
-  const d = S.data._coachMens || {};
-  const releves = d.releves || [];
-
-  const poidsPts = releves.map(r=>r.poids).filter(v=>v!==null&&v!==''&&!isNaN(v)).map(Number);
-  const poidsActuel = poidsPts.length ? poidsPts[poidsPts.length-1] : null;
-  const poidsDebut  = poidsPts.length ? poidsPts[0] : null;
-  const varPoids    = poidsActuel !== null ? (poidsActuel - poidsDebut).toFixed(1) : null;
-
-  let html = '';
-  if (poidsActuel !== null) {
-    html += `<div class="card" style="text-align:center;margin-bottom:12px;">
-      <div class="field-label">POIDS ACTUEL</div>
-      <div style="font-size:32px;font-weight:700;margin:6px 0;">${poidsActuel} kg</div>
-      <div style="font-size:13px;color:${varPoids>=0?'var(--green)':'#D85A30'};">${varPoids>=0?'+':''}${varPoids} kg depuis le début</div>
-    </div>`;
-    if (poidsPts.length >= 2) {
-      html += `<div class="card"><div style="font-size:13px;font-weight:600;margin-bottom:8px;color:#378ADD;">Évolution du poids</div>${miniGraphe(releves.map(r=>r.poids),'#378ADD',' kg')}</div>`;
-    }
-  }
-
-  const histRows = releves.length ? releves.slice().reverse().map(r => `
-    <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);">
-      <div style="font-size:13px;color:var(--muted);">${r.date}${r.phase?' · '+r.phase:''}</div>
-      <div style="font-size:13px;">${r.poids?r.poids+' kg':'—'}${r.taille?' · '+r.taille+' cm':''}</div>
-    </div>`).join('')
-    : '<div style="font-size:13px;color:var(--muted);text-align:center;padding:12px;">Aucune mesure.</div>';
-
-  html += `<div class="card"><div style="font-size:13px;font-weight:600;margin-bottom:10px;">Historique</div>${histRows}</div>`;
-
-  return `<div id="app">
-    ${renderHeader('Mensurations · ' + esc(d.nom || ''), '', false)}
-    <div class="page">
-      ${html}
-      <button class="btn-secondary" onclick="setPage(_coachBilanRetour||'centre-bilans')">← Retour</button>
-    </div>
-  </div>`;
+function voirMensurationsClient(clientId, nom) {
+  const retour = S.page;
+  _clientSelectionne = { id: clientId, nom: nom || clientId };
+  enterVueClient(clientId, () => loadMensurations(), retour);
 }
 
 // ── Rapports de bugs (coach) ──────────────────────────────────────────

@@ -180,8 +180,11 @@ function setPage(name) {
 
 // ── Vue client (coach simule un client) ───────────────────────────────
 let _coachSavedState = null;
+let _vueClientRetour = 'client-detail';
 
-function enterVueClient(clientId) {
+// andThen : callback de navigation à exécuter une fois en vue client (défaut loadHome)
+// retour : page à afficher au clic sur "Retour coach" (défaut 'client-detail')
+function enterVueClient(clientId, andThen, retour) {
   const nom = (_clientSelectionne && _clientSelectionne.nom) || clientId;
   _coachSavedState = {
     client: S.client,
@@ -194,7 +197,9 @@ function enterVueClient(clientId) {
   S.data = {};
   _journeeData = null;
   _viewAsClientOverride = clientId;
-  loadHome();
+  _vueClientRetour = retour || 'client-detail';
+  if (typeof andThen === 'function') andThen();
+  else loadHome();
 }
 
 function exitVueClient() {
@@ -207,7 +212,7 @@ function exitVueClient() {
   _coachSavedState = null;
   const banner = document.getElementById('coachRetourBanner');
   if (banner) banner.remove();
-  setPage('client-detail');
+  setPage(_vueClientRetour || 'client-detail');
 }
 
 // ── Rendu principal ───────────────────────────────────────────────────
@@ -236,8 +241,6 @@ function render() {
     case 'centre-bilans':        document.body.innerHTML = renderCentreBilans();         break;
     case 'notifications-coach':  document.body.innerHTML = renderNotificationsCoach();   break;
     case 'rapports-bugs':        document.body.innerHTML = renderRapportsBugs();         break;
-    case 'coach-bilan':          document.body.innerHTML = renderCoachBilan();           break;
-    case 'coach-mensurations':   document.body.innerHTML = renderCoachMensurations();    break;
     case 'mes-clients':          document.body.innerHTML = renderMesClients();           break;
     case 'client-detail':        document.body.innerHTML = renderClientDetail();         break;
     case 'client-progression':   document.body.innerHTML = renderClientProgression();    break;
