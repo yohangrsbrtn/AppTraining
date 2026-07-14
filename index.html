@@ -440,7 +440,7 @@ function renderHome() {
   const niveau = p.niveau || 1;
   const tier = typeof niveauToTier === 'function' ? niveauToTier(niveau) : 'debutant';
   const tc = typeof getTierColors === 'function' ? getTierColors(tier) : {c1:'#a8b0c8',c2:'#404858',bar:'linear-gradient(90deg,#808898,#c0c8d8)'};
-  const sz = tier === 'legendaire' ? 52 : tier === 'diamant' ? 48 : tier === 'platine' ? 44 : 40;
+  const sz = tier === 'legendaire' ? 62 : tier === 'diamant' ? 56 : tier === 'platine' ? 50 : 44;
   const xpPct = p.pct || 0;
   const xpTotal = p.xpTotal || 0;
   const xpManquant = p.xpManquant != null ? p.xpManquant : 10;

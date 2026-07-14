@@ -59,14 +59,14 @@ function renderProgressionPage() {
   const niveau = p.niveau || 1;
   const tier = niveauToTier(niveau);
   const tc = getTierColors(tier);
-  const sz = tier === 'legendaire' ? 72 : tier === 'diamant' ? 66 : tier === 'platine' ? 60 : 54;
+  const sz = tier === 'legendaire' ? 62 : tier === 'diamant' ? 56 : tier === 'platine' ? 50 : 44;
   const xpPct = p.pct || 0;
   const xpTotal = p.xpTotal || 0;
   const xpManquant = p.xpManquant != null ? p.xpManquant : 10;
 
   const titreId = p.titreActif || ((() => { try { return localStorage.getItem('titreActif_' + S.client) || null; } catch(e) { return null; } })());
   const titreDef = titreId && typeof TITRES_DEF !== 'undefined' ? TITRES_DEF.find(t => t.id === titreId) : null;
-  const titreHtml = titreDef ? `<div style="margin-top:6px;"><span style="font-size:12px;font-weight:700;color:${titreDef.c1};background:${titreDef.c1}22;border:1px solid ${titreDef.c1}55;border-radius:6px;padding:3px 9px;">${titreDef.icon} ${titreDef.nom}</span></div>` : '';
+  const titreHtml = titreDef ? `<span style="font-size:10px;font-weight:700;color:${titreDef.c1};background:${titreDef.c1}22;border:1px solid ${titreDef.c1}55;border-radius:6px;padding:2px 8px;margin-left:2px;">${titreDef.icon} ${titreDef.nom}</span>` : '';
 
   // ── Pas cumulés : progression vers le prochain palier (150k/300k/600k/1M)
   const ptRaw = Math.round(p.pasTotal || 0);
@@ -148,42 +148,44 @@ function renderProgressionPage() {
     </div>`;
   })() : '';
 
-  return `<div id="app">
-    ${renderHeader('Progression', '', false)}
-    <div class="page">
+  return `<div id="app" style="background:#0f1117;min-height:100dvh;padding:16px 16px calc(20px + env(safe-area-inset-bottom));max-width:500px;margin:0 auto;padding-top:calc(16px + env(safe-area-inset-top));">
 
-      <!-- Hero niveau -->
-      <div style="
-        background:linear-gradient(145deg,#131825 0%,${tc.c2}aa 30%,${tc.c2}ee 50%,${tc.c2}aa 70%,#131825 100%);
-        border-radius:16px;border-top:3px solid ${tc.c1};
-        border-left:1px solid ${tc.c1}44;border-right:1px solid ${tc.c1}44;border-bottom:1px solid ${tc.c1}33;
-        padding:22px 18px;margin-bottom:14px;
-        box-shadow:inset 0 1px 0 ${tc.c1}55,0 0 28px ${tc.c1}33,0 2px 16px rgba(0,0,0,0.5);">
-        <div style="display:flex;align-items:center;gap:18px;">
+    <!-- Hero niveau — identique à l'en-tête de l'accueil (même taille, même agencement) -->
+    <div style="
+      background:linear-gradient(145deg,#131825 0%,${tc.c2}99 30%,${tc.c2}ee 50%,${tc.c2}99 70%,#131825 100%);
+      border-radius:12px;border-top:4px solid ${tc.c1};
+      border-left:1px solid ${tc.c1}33;border-right:1px solid ${tc.c1}33;border-bottom:1px solid ${tc.c1}22;
+      padding:14px 16px;margin-bottom:16px;
+      box-shadow:inset 0 1px 0 ${tc.c1}88,0 0 28px ${tc.c1}44,0 2px 14px rgba(0,0,0,0.45);">
+      <div style="display:flex;align-items:center;gap:14px;">
+        <div style="display:flex;align-items:center;gap:14px;flex:1;min-width:0;">
           <div style="flex-shrink:0;">${getBadgeSVG(tier, sz, 'prog')}</div>
           <div style="flex:1;min-width:0;">
-            <div style="font-size:20px;font-weight:700;color:#f0f2ff;margin-bottom:2px;">${p.prenom || S.client}</div>
-            <div style="font-size:13px;color:${tc.c1};font-weight:600;letter-spacing:.5px;">NIVEAU ${niveau}</div>
-            ${titreHtml}
-            <div style="margin-top:12px;display:flex;justify-content:space-between;margin-bottom:5px;">
-              <span style="font-size:10px;color:#8892a4;">${xpTotal.toLocaleString('fr')} XP</span>
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              <span style="font-size:18px;font-weight:700;color:#f0f2ff;">${p.prenom || S.client}</span>
+              ${titreHtml}
+            </div>
+            <div style="font-size:12px;color:#8892a4;margin-top:2px;">${xpTotal ? xpTotal.toLocaleString('fr') + ' XP' : '—'}</div>
+            <div style="margin-top:8px;display:flex;justify-content:space-between;">
+              <span style="font-size:10px;color:#8892a4;">Niv. ${niveau}</span>
               <span style="font-size:10px;color:${tc.c1};font-weight:600;">${xpManquant.toLocaleString('fr')} XP → Niv. ${niveau+1}</span>
             </div>
-            <div style="height:5px;background:#1e2235;border-radius:3px;overflow:hidden;">
-              <div style="height:100%;border-radius:3px;width:${xpPct}%;background:${tc.bar};transition:width .6s;"></div>
+            <div style="height:4px;background:#1e2235;border-radius:2px;overflow:hidden;margin-top:6px;">
+              <div style="height:4px;border-radius:2px;width:${xpPct}%;background:${tc.bar};transition:width .6s ease;"></div>
             </div>
           </div>
         </div>
+        <button onclick="ouvrirSettings()" style="width:36px;height:36px;background:transparent;border:1px solid #2a2f45;border-radius:9px;padding:0;font-size:17px;margin:0;line-height:36px;color:#555e7a;text-align:center;flex-shrink:0;align-self:flex-start;cursor:pointer;">⚙️</button>
       </div>
-
-      ${renderGauge(p.pctSeances || 0, '#3ecf8e', 'Séances', p.seancesValidees || 0, p.seancesAttendues || 0)}
-      ${renderGauge(p.pctBilans || 0, '#a78bfa', 'Bilans', p.bilansValidies || 0, p.bilansAttendus || 0)}
-      ${renderGauge(p.assiduiteGlobale || 0, '#f59e0b', 'Assiduité globale', (p.assiduiteGlobale || 0) + '%', '')}
-      ${pasHtml}
-      ${collectionHtml}
-      ${historiqueHtml}
-
-      <button class="btn-secondary" onclick="loadHome()" style="margin-top:10px;">← Accueil</button>
     </div>
+
+    ${renderGauge(p.pctSeances || 0, '#3ecf8e', 'Séances', p.seancesValidees || 0, p.seancesAttendues || 0)}
+    ${renderGauge(p.pctBilans || 0, '#a78bfa', 'Bilans', p.bilansValidies || 0, p.bilansAttendus || 0)}
+    ${renderGauge(p.assiduiteGlobale || 0, '#f59e0b', 'Assiduité globale', (p.assiduiteGlobale || 0) + '%', '')}
+    ${pasHtml}
+    ${collectionHtml}
+    ${historiqueHtml}
+
+    <button class="btn-secondary" onclick="loadHome()" style="margin-top:10px;">← Accueil</button>
   </div>`;
 }
