@@ -323,6 +323,11 @@ async function loadHome() {
         const rapports = await api('chargerRapportsBugs');
         S.data.bugsNonLus = rapports?.nonLus || 0;
       } catch(e) { S.data.bugsNonLus = 0; }
+      try {
+        const result = await api('chargerTousLesLogs');
+        const lastSeen = result?.lastSeen || 0;
+        S.data.notifsNonLues = (result?.logs || []).filter(l => l.tms > lastSeen).length;
+      } catch(e) { S.data.notifsNonLues = 0; }
     }
     setPage('home');
     // Détection déblocages niveau/titres (clients seulement, pas le coach en vue client)
@@ -531,7 +536,8 @@ function renderHome() {
         <div style="font-size:11px;color:#8892a4;margin-top:3px;">Bilans reçus à traiter</div>
       </div>
 
-      <div onclick="loadNotificationsCoach()" ontouchstart="this.style.background='#242838'" ontouchend="this.style.background='#1a1d29'" style="background:#1a1d29;border-radius:12px;padding:18px 14px;text-align:center;cursor:pointer;border-top:3px solid #4f8ef7;-webkit-tap-highlight-color:transparent;">
+      <div onclick="loadNotificationsCoach()" ontouchstart="this.style.background='#242838'" ontouchend="this.style.background='#1a1d29'" style="background:#1a1d29;border-radius:12px;padding:18px 14px;text-align:center;cursor:pointer;border-top:3px solid #4f8ef7;position:relative;-webkit-tap-highlight-color:transparent;">
+        ${(S.data.notifsNonLues||0) > 0 ? `<div style="position:absolute;top:8px;right:8px;background:#e05c5c;color:#fff;font-size:11px;font-weight:700;min-width:18px;height:18px;border-radius:9px;display:flex;align-items:center;justify-content:center;padding:0 4px;">${S.data.notifsNonLues}</div>` : ''}
         <svg width="38" height="38" viewBox="0 0 44 44" fill="none" style="margin-bottom:8px;"><path d="M22 6 C15 6 11 12 11 20 L11 29 L7 33 L37 33 L33 29 L33 20 C33 12 29 6 22 6 Z" fill="#4f8ef7" opacity="0.15" stroke="#4f8ef7" stroke-width="1.5"/><path d="M18 33 Q18 37 22 37 Q26 37 26 33" stroke="#4f8ef7" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
         <div style="font-size:13px;font-weight:600;color:#e8eaf0;">Notifications</div>
         <div style="font-size:11px;color:#8892a4;margin-top:3px;">Activité clients</div>

@@ -331,6 +331,8 @@ async function loadNotificationsCoach() {
   try {
     _notifData   = await api('chargerTousLesLogs');
     _notifFiltre = null;
+    api('marquerNotifsLues').catch(() => {});
+    S.data.notifsNonLues = 0;
     setPage('notifications-coach');
   } catch(e) { setPage('home'); }
 }
