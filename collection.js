@@ -72,7 +72,7 @@ async function loadCollection() {
 function _colVal(cat) {
   const p = S.data.prog || {};
   if (cat === 'pas')    return p.pasTotal        || 0;
-  if (cat === 'bilan')  return p.nbBilansValides  || 0;
+  if (cat === 'bilan')  return p.bilansValidies  || 0;
   if (cat === 'seance') return p.seancesValidees  || 0;
   if (cat === 'niveau') return p.niveau           || 1;
   return 0;
@@ -167,6 +167,24 @@ function renderCollectionPage() {
 }
 
 // ── Système de déblocage (level-up + titres) ──────────────────────────
+
+function verifierDeblocages(p) {
+  p = p || {};
+  const deblocages = detecterDeblocagesNiveau(p.niveau || 1);
+  const titres = detecterDeblocagesTitres(p.pasTotal||0, p.bilansValidies||0, p.seancesValidees||0, p.niveau||1);
+  if (deblocages.length > 0 || titres.length > 0) afficherDeblocage(deblocages.concat(titres));
+}
+
+// Re-fetch la progression puis vérifie les déblocages — à appeler après
+// toute action qui peut faire gagner de l'XP (séance, journée, bilan)
+async function rafraichirProgressionEtDeblocages() {
+  if (S.isCoach || _viewAsClientOverride) return;
+  try {
+    const p = await api('chargerProgressionClient');
+    S.data.prog = p;
+    verifierDeblocages(p);
+  } catch(e) {}
+}
 
 function detecterDeblocagesNiveau(niveau) {
   const key = 'lastNiveau_' + getClient();

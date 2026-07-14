@@ -185,7 +185,7 @@ function renderClientProgression() {
       <div class="stats-row">
         <div style="background:linear-gradient(135deg,#0f1a10,#162a1a);border:1px solid #1D9E7555;border-radius:14px;padding:18px 12px;text-align:center;">
           <div style="font-size:28px;margin-bottom:6px;">📋</div>
-          <div style="font-size:34px;font-weight:700;color:#1D9E75;line-height:1;">${p.nbBilansValides || 0}</div>
+          <div style="font-size:34px;font-weight:700;color:#1D9E75;line-height:1;">${p.bilansValidies || 0}</div>
           <div style="font-size:12px;color:var(--muted);margin-top:6px;">Bilans validés</div>
         </div>
         <div style="background:linear-gradient(135deg,#0a1220,#0f1e38);border:1px solid #378ADD55;border-radius:14px;padding:18px 12px;text-align:center;">

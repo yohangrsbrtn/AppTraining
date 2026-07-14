@@ -245,6 +245,7 @@ function _effectuerValidation() {
   api('validerJournee', { ligne: ligneDate, semaine: _tSemaineActive }).catch(() => {});
 
   afficherOverlay('🏆', 'Séance validée !', 'Toutes tes données ont été enregistrées. Beau boulot !', true);
+  setTimeout(() => rafraichirProgressionEtDeblocages(), 600);
 }
 
 function afficherOverlay(icon, titre, message, fermerSurBouton) {

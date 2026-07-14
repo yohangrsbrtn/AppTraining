@@ -332,12 +332,7 @@ async function loadHome() {
     setPage('home');
     // Détection déblocages niveau/titres (clients seulement, pas le coach en vue client)
     if (!S.isCoach && !_viewAsClientOverride) {
-      setTimeout(() => {
-        const p = S.data.prog || {};
-        const deblocages = typeof detecterDeblocagesNiveau === 'function' ? detecterDeblocagesNiveau(p.niveau || 1) : [];
-        const titres = typeof detecterDeblocagesTitres === 'function' ? detecterDeblocagesTitres(p.pasTotal||0, p.nbBilansValides||0, p.seancesValidees||0, p.niveau||1) : [];
-        if (deblocages.length > 0 || titres.length > 0) afficherDeblocage(deblocages.concat(titres));
-      }, 300);
+      setTimeout(() => verifierDeblocages(S.data.prog), 300);
     }
     // fire-and-forget classement — lit un spreadsheet séparé (LOG_SHEET_ID), safe en concurrent
     setTimeout(() => {
@@ -808,6 +803,7 @@ async function validerJourneeClient() {
     const modal = document.getElementById('modalJournee');
     if (modal) modal.remove();
     _majCarteJournee();
+    setTimeout(() => rafraichirProgressionEtDeblocages(), 300);
   } catch(e) {
     if (btn) { btn.disabled = false; btn.style.opacity = '1'; btn.textContent = '✅ Valider ma journée'; }
     alert('Erreur lors de la validation.');
