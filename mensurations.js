@@ -55,6 +55,9 @@ async function ouvrirSaisieMensuration(ligne) {
 // ── Render ────────────────────────────────────────────────────────────
 
 function renderMensurationsPage() {
+  if (S.page === 'mens-loading') {
+    return `<div id="app">${renderHeader('Mes Mensurations','',false)}<div class="page">${renderSpinner()}</div>${renderNavBar('mensurations')}</div>`;
+  }
   if (_mSubPage === 'saisie-list') return renderSaisieList();
   if (_mSubPage === 'saisie-form') return renderSaisieForm();
   return renderHistorique();

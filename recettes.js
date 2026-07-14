@@ -27,6 +27,9 @@ async function ouvrirRecette(fileId, nom) {
 // ── Render ────────────────────────────────────────────────────────────
 
 function renderRecettesPage() {
+  if (S.page === 'recettes-loading') {
+    return `<div id="app">${renderHeader('Recettes','',false)}<div class="page">${renderSpinner()}</div>${renderNavBar('recettes')}</div>`;
+  }
   if (_rSubPage === 'detail' && _rDetail) return renderRecetteDetail();
   return renderRecetteList();
 }

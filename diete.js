@@ -27,6 +27,9 @@ async function ouvrirDiete(ligne, col, nom) {
 // ── Render ────────────────────────────────────────────────────────────
 
 function renderDietePage() {
+  if (S.page === 'diete-loading') {
+    return `<div id="app">${renderHeader('Ma Diète','',false)}<div class="page">${renderSpinner()}</div>${renderNavBar('diete')}</div>`;
+  }
   if (_dSubPage === 'detail' && _dDetail) return renderDieteDetail();
   return renderDieteList();
 }

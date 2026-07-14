@@ -225,7 +225,7 @@ function render() {
     case 'login':         app.innerHTML = renderLogin();   bindLogin(); break;
     case 'home':          document.body.innerHTML = renderHome(); break;
     case 'training':
-    case 'training-loading': document.body.innerHTML = _tSubPage === 'seance' || S.page === 'training-loading' ? renderTrainingPage() : renderTrainingPage(); break;
+    case 'training-loading': document.body.innerHTML = renderTrainingPage(); break;
     case 'bilan':
     case 'bilan-loading': document.body.innerHTML = renderBilanPage(); break;
     case 'diete':

@@ -56,7 +56,7 @@ async function loadBilanHistorique(ligneTitre) {
 // ── Render ────────────────────────────────────────────────────────────
 
 function renderBilanPage() {
-  if (_bilanMode === 'bilan-loading') {
+  if (S.page === 'bilan-loading') {
     return `<div id="app">${renderHeader('Bilan','',false)}<div class="page">${renderSpinner()}</div>${renderNavBar('bilan')}</div>`;
   }
   if (_bilanMode === 'history-list') return renderHistoriqueList();

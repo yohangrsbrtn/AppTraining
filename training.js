@@ -62,6 +62,9 @@ async function ouvrirSeance() {
 // ── Render ────────────────────────────────────────────────────────────
 
 function renderTrainingPage() {
+  if (S.page === 'training-loading') {
+    return `<div id="app">${renderHeader('Programme','',false)}<div class="page">${renderSpinner()}</div>${renderNavBar('training')}</div>`;
+  }
   if (_tSubPage === 'seance' && _tSeanceData) return renderSeance();
   return renderTrainingSelector();
 }
