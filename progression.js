@@ -66,7 +66,10 @@ function renderProgressionPage() {
 
   const titreId = p.titreActif || ((() => { try { return localStorage.getItem('titreActif_' + S.client) || null; } catch(e) { return null; } })());
   const titreDef = titreId && typeof TITRES_DEF !== 'undefined' ? TITRES_DEF.find(t => t.id === titreId) : null;
-  const titreHtml = titreDef ? `<span style="font-size:10px;font-weight:700;color:${titreDef.c1};background:${titreDef.c1}22;border:1px solid ${titreDef.c1}55;border-radius:6px;padding:2px 8px;margin-left:2px;">${titreDef.icon} ${titreDef.nom}</span>` : '';
+  const titreHtml = titreDef ? `<span style="display:inline-flex;align-items:center;gap:4px;background:linear-gradient(90deg,${titreDef.c2}cc,${titreDef.c1}99);border:1px solid ${titreDef.c1}66;border-radius:20px;padding:2px 8px 2px 2px;margin-left:2px;">
+    <span style="width:16px;height:16px;border-radius:50%;background:linear-gradient(135deg,${titreDef.c1}cc,${titreDef.c2});display:flex;align-items:center;justify-content:center;box-shadow:0 0 6px ${titreDef.c1}66;flex-shrink:0;"><span style="font-size:9px;line-height:1;">${titreDef.icon}</span></span>
+    <span style="font-size:10px;font-weight:700;color:#f0f2ff;text-shadow:0 0 6px ${titreDef.c1}44;white-space:nowrap;">${titreDef.nom}</span>
+  </span>` : '';
 
   // ── Pas cumulés : progression vers le prochain palier (150k/300k/600k/1M)
   const ptRaw = Math.round(p.pasTotal || 0);
