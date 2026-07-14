@@ -29,7 +29,7 @@ async function loadMesClients() {
     const raw = await api('listerClientsAvecNiveaux');
     _mesClients = typeof raw === 'string' ? JSON.parse(raw) : raw;
     setPage('mes-clients');
-  } catch(e) { setPage('coach-home'); }
+  } catch(e) { setPage('home'); }
 }
 
 function ouvrirClientDetail(clientId) {
@@ -210,69 +210,7 @@ function renderClientProgression() {
 
 // ── Coach home ────────────────────────────────────────────────────────
 
-let _coachBilansCount = 0; // bilans à traiter (badge)
-
-async function loadCoachHome() {
-  setPage('loading');
-  try {
-    const bilans = await api('listerBilansCoach');
-    S.data.coachBilans = bilans;
-    _coachBilansCount = (bilans || []).filter(b => !b.coachTraite).length;
-    setPage('coach-home');
-  } catch(e) { setPage('coach-home'); }
-}
-
-function renderCoachHome() {
-  const nATraiter = _coachBilansCount;
-
-  return `<div id="app">
-    ${renderHeader('Espace Coach', '', false)}
-    <div class="page">
-
-      <div class="card" style="text-align:center;padding:24px;margin-bottom:16px;background:linear-gradient(135deg,#0f1825,#131e30);border-color:#2a3a5a;">
-        <div style="font-size:36px;margin-bottom:8px;">🏋️</div>
-        <div style="font-size:20px;font-weight:700;color:#f0f2ff;">Yohan</div>
-        <div style="font-size:13px;color:var(--muted);margin-top:4px;">Mode coach activé</div>
-      </div>
-
-      <div onclick="loadCentreBilans()" style="
-        background:#161b2e;border-radius:14px;border:1.5px solid #1D9E7544;
-        padding:18px 16px;margin-bottom:12px;cursor:pointer;display:flex;align-items:center;gap:14px;
-        position:relative;overflow:hidden;">
-        <div style="font-size:34px;flex-shrink:0;">📋</div>
-        <div style="flex:1;">
-          <div style="font-size:16px;font-weight:700;color:#f0f2ff;">Centre bilans</div>
-          <div style="font-size:13px;color:var(--muted);margin-top:3px;">Bilans envoyés par les clients</div>
-        </div>
-        ${nATraiter > 0 ? `<div style="background:#e05c5c;color:#fff;border-radius:99px;font-size:13px;font-weight:700;padding:4px 10px;flex-shrink:0;">${nATraiter}</div>` : `<div style="color:var(--muted);font-size:18px;">›</div>`}
-      </div>
-
-      <div onclick="loadNotificationsCoach()" style="
-        background:#161b2e;border-radius:14px;border:1.5px solid #378ADD44;
-        padding:18px 16px;margin-bottom:12px;cursor:pointer;display:flex;align-items:center;gap:14px;">
-        <div style="font-size:34px;flex-shrink:0;">🔔</div>
-        <div style="flex:1;">
-          <div style="font-size:16px;font-weight:700;color:#f0f2ff;">Notifications</div>
-          <div style="font-size:13px;color:var(--muted);margin-top:3px;">Activité des clients (7 derniers jours)</div>
-        </div>
-        <div style="color:var(--muted);font-size:18px;">›</div>
-      </div>
-
-      <div onclick="loadMesClients()" style="
-        background:#161b2e;border-radius:14px;border:1.5px solid #4f6ef744;
-        padding:18px 16px;margin-bottom:12px;cursor:pointer;display:flex;align-items:center;gap:14px;">
-        <div style="font-size:34px;flex-shrink:0;">👥</div>
-        <div style="flex:1;">
-          <div style="font-size:16px;font-weight:700;color:#f0f2ff;">Mes clients</div>
-          <div style="font-size:13px;color:var(--muted);margin-top:3px;">Progression, bilans, mensurations</div>
-        </div>
-        <div style="color:var(--muted);font-size:18px;">›</div>
-      </div>
-
-      <button class="btn-secondary" onclick="deconnexion()" style="color:var(--red);margin-top:8px;">🚪 Se déconnecter</button>
-    </div>
-  </div>`;
-}
+let _coachBilansCount = 0; // bilans à traiter (badge dans renderHome)
 
 // ── Centre bilans ─────────────────────────────────────────────────────
 
@@ -285,7 +223,7 @@ async function loadCentreBilans() {
     _centreBilansData = await api('listerBilansCoach');
     _coachBilansCount = (_centreBilansData || []).filter(b => !b.coachTraite).length;
     setPage('centre-bilans');
-  } catch(e) { setPage('coach-home'); }
+  } catch(e) { setPage('home'); }
 }
 
 async function marquerTraiteCoach(clientId, ts) {
@@ -378,7 +316,7 @@ function renderCentreBilans() {
     <div class="page">
       ${html}
       <button class="btn-secondary" onclick="loadCentreBilans()" style="margin-bottom:8px;">↻ Rafraîchir</button>
-      <button class="btn-secondary" onclick="setPage('coach-home')">← Retour</button>
+      <button class="btn-secondary" onclick="loadHome()">← Retour</button>
     </div>
   </div>`;
 }
@@ -394,7 +332,7 @@ async function loadNotificationsCoach() {
     _notifData   = await api('chargerTousLesLogs');
     _notifFiltre = null;
     setPage('notifications-coach');
-  } catch(e) { setPage('coach-home'); }
+  } catch(e) { setPage('home'); }
 }
 
 function renderNotificationsCoach() {
@@ -460,7 +398,7 @@ function renderNotificationsCoach() {
       ${filtresHtml}
       ${logsHtml}
       <button class="btn-secondary" onclick="loadNotificationsCoach()" style="margin-bottom:8px;">↻ Rafraîchir</button>
-      <button class="btn-secondary" onclick="setPage('coach-home')">← Retour</button>
+      <button class="btn-secondary" onclick="loadHome()">← Retour</button>
     </div>
   </div>`;
 }
