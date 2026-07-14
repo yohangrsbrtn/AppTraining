@@ -632,60 +632,157 @@ function renderProfil() {
   </div>`;
 }
 
-let _settingsTab = 'menu';
+// ── Paramètres ────────────────────────────────────────────────────────
+// Structure alignée sur le GAS officiel : onglets Fonctionnement/Rapport de
+// bug, sous-onglets L'application (accordéon) / Système XP. Le contenu du
+// Bilan/Mensurations est réécrit pour matcher le fonctionnement RÉEL actuel
+// (mensurations découplées de l'envoi/clôture du bilan — pas de blocage).
+let _settingsTab = 'guide'; // 'guide' | 'bug'
+let _settingsGuideSub = 'application'; // 'application' | 'xp'
+let _settingsAccordion = null; // 'journee' | 'bilan' | 'mensurations' | 'titres' | null
 
 function ouvrirSettings(tab) {
-  _settingsTab = tab || 'menu';
+  if (tab === 'guide' || tab === 'bug') _settingsTab = tab;
   const existing = document.getElementById('settingsPanel');
   if (existing) existing.remove();
   const el = document.createElement('div');
   el.id = 'settingsPanel';
-  el.style.cssText = 'position:fixed;inset:0;z-index:500;background:rgba(0,0,0,0.8);display:flex;align-items:flex-end;';
+  el.style.cssText = 'position:fixed;inset:0;z-index:500;background:rgba(0,0,0,0.82);display:flex;align-items:flex-end;';
 
-  let inner = '';
-  if (_settingsTab === 'guide') {
-    inner = `
-      <button onclick="ouvrirSettings('menu')" style="display:block;width:100%;background:transparent;border:none;color:#8892a4;font-size:13px;padding:0 0 16px;cursor:pointer;text-align:left;">‹ Retour</button>
-      <div style="font-size:16px;font-weight:700;color:#f0f2ff;margin-bottom:16px;">📖 Guide & Fonctionnement</div>
-      <div style="font-size:13px;color:#c0c8d8;line-height:1.7;max-height:55vh;overflow-y:auto;">
-        <div style="font-weight:700;color:#4f8ef7;margin-bottom:6px;">🏋️ Entraînement</div>
-        <div style="margin-bottom:12px;">Saisis tes séances semaine par semaine. Charge, reps et temps de repos sont enregistrés et suivis dans ta progression.</div>
-        <div style="font-weight:700;color:#3ecf8e;margin-bottom:6px;">🥗 Diète</div>
-        <div style="margin-bottom:12px;">Consulte ton plan alimentaire personnalisé. Chaque repas est détaillé avec les macros (protéines, glucides, lipides).</div>
-        <div style="font-weight:700;color:#a78bfa;margin-bottom:6px;">📏 Mensurations</div>
-        <div style="margin-bottom:12px;">Enregistre régulièrement ton poids et tes mensurations pour suivre ton évolution dans le temps avec des graphiques.</div>
-        <div style="font-weight:700;color:#f59e0b;margin-bottom:6px;">📋 Bilan hebdomadaire</div>
-        <div style="margin-bottom:12px;">Chaque semaine, remplis ton bilan (énergie, douleurs, nutrition, entraînement) et valide-le. Ton coach le consulte et te répond.</div>
-        <div style="font-weight:700;color:#378ADD;margin-bottom:6px;">☀️ Journée en cours</div>
-        <div style="margin-bottom:12px;">Chaque jour, coche ce que tu as fait (diète, training, cardio) et renseigne tes pas. Valide ta journée une fois terminée.</div>
-        <div style="font-weight:700;color:#f59e0b;margin-bottom:6px;">⭐ XP & Niveaux</div>
-        <div style="margin-bottom:12px;">Tu gagnes de l'XP en validant tes bilans, journées, séances, etc. Monte de niveau pour débloquer des badges et titres exclusifs.</div>
-      </div>`;
-  } else if (_settingsTab === 'bug') {
-    inner = `
-      <button onclick="ouvrirSettings('menu')" style="display:block;width:100%;background:transparent;border:none;color:#8892a4;font-size:13px;padding:0 0 16px;cursor:pointer;text-align:left;">‹ Retour</button>
-      <div style="font-size:16px;font-weight:700;color:#f0f2ff;margin-bottom:6px;">🐛 Signaler un bug</div>
-      <div style="font-size:12px;color:#8892a4;margin-bottom:16px;">Décris le problème rencontré et sur quelle page</div>
-      <textarea id="bugDesc" placeholder="Ex: Sur la page bilan, le bouton 'Valider' ne répond pas après avoir rempli les champs…"
-        style="width:100%;padding:12px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:10px;font-size:13px;font-family:inherit;resize:none;height:120px;box-sizing:border-box;margin-bottom:12px;"></textarea>
-      <button onclick="envoyerBugReport()" style="width:100%;padding:13px;background:linear-gradient(135deg,#4f8ef7,#2260c8);border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:pointer;">Envoyer le rapport</button>`;
-  } else {
-    inner = `
-      <div style="font-size:16px;font-weight:700;color:#f0f2ff;margin-bottom:16px;">Paramètres</div>
-      <button onclick="document.getElementById('settingsPanel').remove();loadProgression()" style="display:flex;align-items:center;gap:12px;width:100%;background:#131929;border:1px solid #2a3050;color:#e8eaf0;font-size:14px;font-weight:600;padding:13px 16px;border-radius:10px;cursor:pointer;margin-bottom:8px;text-align:left;">📊<span>Ma progression</span></button>
-      <button onclick="document.getElementById('settingsPanel').remove();loadCollection()" style="display:flex;align-items:center;gap:12px;width:100%;background:#131929;border:1px solid #2a3050;color:#e8eaf0;font-size:14px;font-weight:600;padding:13px 16px;border-radius:10px;cursor:pointer;margin-bottom:8px;text-align:left;">🏆<span>Ma collection</span></button>
-      <button onclick="ouvrirSettings('guide')" style="display:flex;align-items:center;gap:12px;width:100%;background:#131929;border:1px solid #2a3050;color:#e8eaf0;font-size:14px;font-weight:600;padding:13px 16px;border-radius:10px;cursor:pointer;margin-bottom:8px;text-align:left;">📖<span>Guide & Fonctionnement</span></button>
-      <button onclick="ouvrirSettings('bug')" style="display:flex;align-items:center;gap:12px;width:100%;background:#131929;border:1px solid #2a3050;color:#e8eaf0;font-size:14px;font-weight:600;padding:13px 16px;border-radius:10px;cursor:pointer;margin-bottom:20px;text-align:left;">🐛<span>Signaler un bug</span></button>
-      <button onclick="document.getElementById('settingsPanel').remove();deconnexion()" style="display:flex;align-items:center;gap:12px;width:100%;background:#1a0a0a;border:1px solid #5a2020;color:#e05c5c;font-size:14px;font-weight:600;padding:13px 16px;border-radius:10px;cursor:pointer;margin-bottom:8px;text-align:left;">🚪<span>Se déconnecter</span></button>
-      <button onclick="document.getElementById('settingsPanel').remove()" style="display:block;width:100%;background:transparent;border:none;color:#555e7a;font-size:14px;padding:10px;cursor:pointer;">Annuler</button>`;
-  }
+  const tabBtn = (id, label, active) => `<button onclick="switchSettingsTab('${id}')" style="flex:1;padding:9px 0;font-size:13px;font-weight:600;border-radius:10px;margin:0;border:${active?'none':'1px solid #2d3142'};background:${active?'linear-gradient(135deg,#4f8ef7,#3570d4)':'#1e2235'};color:${active?'#fff':'#8892a4'};cursor:pointer;">${label}</button>`;
+  const content = _settingsTab === 'bug' ? renderSettingsBug() : renderSettingsGuide();
 
-  el.innerHTML = `<div style="background:#1a1d29;border-radius:16px 16px 0 0;padding:20px 20px calc(28px + env(safe-area-inset-bottom));width:100%;max-width:500px;margin:0 auto;">
-    <div style="width:36px;height:4px;background:#2d3142;border-radius:2px;margin:0 auto 20px;"></div>
-    ${inner}
+  el.innerHTML = `<div style="background:#161b2e;border-radius:20px 20px 0 0;width:100%;max-width:500px;margin:0 auto;max-height:88vh;display:flex;flex-direction:column;">
+    <div style="padding:12px 0 4px;display:flex;justify-content:center;flex-shrink:0;"><div style="width:36px;height:4px;background:#2d3142;border-radius:2px;"></div></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 20px 0;flex-shrink:0;">
+      <div style="font-size:17px;font-weight:700;color:#e8eaf0;">Paramètres</div>
+      <button onclick="document.getElementById('settingsPanel').remove()" style="width:30px;height:30px;background:#1e2235;border-radius:50%;padding:0;font-size:15px;margin:0;min-width:unset;line-height:30px;color:#8892a4;border:1px solid #2d3142;cursor:pointer;">✕</button>
+    </div>
+    <div style="display:flex;gap:8px;padding:14px 20px 0;flex-shrink:0;">
+      <button onclick="document.getElementById('settingsPanel').remove();loadProgression()" style="flex:1;background:#131929;border:1px solid #2a3050;color:#e8eaf0;font-size:12px;font-weight:600;padding:9px 6px;border-radius:10px;cursor:pointer;">📊 Progression</button>
+      <button onclick="document.getElementById('settingsPanel').remove();loadCollection()" style="flex:1;background:#131929;border:1px solid #2a3050;color:#e8eaf0;font-size:12px;font-weight:600;padding:9px 6px;border-radius:10px;cursor:pointer;">🏆 Collection</button>
+    </div>
+    <div style="display:flex;gap:8px;padding:10px 20px 0;flex-shrink:0;">
+      ${tabBtn('guide', 'Fonctionnement', _settingsTab !== 'bug')}
+      ${tabBtn('bug', 'Rapport de bug', _settingsTab === 'bug')}
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:16px 20px 12px;-webkit-overflow-scrolling:touch;">
+      ${content}
+    </div>
+    <div style="padding:8px 20px calc(16px + env(safe-area-inset-bottom));flex-shrink:0;text-align:center;">
+      <button onclick="document.getElementById('settingsPanel').remove();deconnexion()" style="background:transparent;border:none;color:#8a4444;font-size:12px;padding:6px;cursor:pointer;">🚪 Se déconnecter</button>
+    </div>
   </div>`;
   el.onclick = e => { if (e.target === el) el.remove(); };
   document.body.appendChild(el);
+}
+
+function switchSettingsTab(tab) { _settingsTab = tab; ouvrirSettings(); }
+function switchGuideSub(sub) { _settingsGuideSub = sub; ouvrirSettings(); }
+function toggleSettingsAccordion(id) { _settingsAccordion = _settingsAccordion === id ? null : id; ouvrirSettings(); }
+
+function renderSettingsGuide() {
+  const subBtn = (id, label, active) => `<button onclick="switchGuideSub('${id}')" style="flex:1;padding:7px 0;font-size:12px;font-weight:600;border-radius:8px;margin:0;background:${active?'#4f8ef7':'#1e2235'};color:${active?'#fff':'#8892a4'};border:${active?'none':'1px solid #2d3142'};cursor:pointer;">${label}</button>`;
+  return `
+    <div style="display:flex;gap:6px;margin-bottom:14px;">
+      ${subBtn('application', "L'application", _settingsGuideSub !== 'xp')}
+      ${subBtn('xp', 'Système XP', _settingsGuideSub === 'xp')}
+    </div>
+    ${_settingsGuideSub === 'xp' ? renderGuideXP() : renderGuideApplication()}`;
+}
+
+function _stepItem(num, color, title, sub, accent) {
+  const titleColor = accent ? color : '#e8eaf0';
+  return `<div style="display:flex;gap:10px;align-items:flex-start;"><div style="width:21px;height:21px;background:${color};border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0;">${num}</div><div><div style="font-size:12px;font-weight:600;color:${titleColor};">${title}</div><div style="font-size:11px;color:#8892a4;margin-top:1px;">${sub}</div></div></div>`;
+}
+function _calloutBox(color, label, text) {
+  return `<div style="background:${color}20;border:1px solid ${color}44;border-radius:10px;padding:10px 12px;font-size:11px;color:#8892a4;line-height:1.5;"><span style="color:${color};font-weight:700;">${label}</span> — ${text}</div>`;
+}
+function _accordionItem(id, icon, title, sub, bodyHtml) {
+  const open = _settingsAccordion === id;
+  return `<div style="background:#0f1117;border-radius:12px;overflow:hidden;margin-bottom:6px;">
+    <div onclick="toggleSettingsAccordion('${id}')" style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;cursor:pointer;user-select:none;-webkit-user-select:none;">
+      <div style="display:flex;align-items:center;gap:10px;"><span style="font-size:20px;">${icon}</span><div><div style="font-size:14px;font-weight:600;color:#e8eaf0;">${title}</div><div style="font-size:11px;color:#8892a4;margin-top:1px;">${sub}</div></div></div>
+      <span style="color:#555e7a;font-size:11px;transition:transform 0.2s;transform:rotate(${open?'180':'0'}deg);display:inline-block;">▼</span>
+    </div>
+    ${open ? `<div style="padding:0 16px 16px;">${bodyHtml}</div>` : ''}
+  </div>`;
+}
+
+function renderGuideApplication() {
+  return `<div style="font-size:13px;color:#8892a4;margin-bottom:14px;line-height:1.5;">Appuie sur une section pour en savoir plus.</div>
+    ${_accordionItem('journee', '🗓️', 'Valider sa journée', 'Carte journée → validation → XP', `
+      <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:11px;">
+        ${_stepItem('1', '#4f8ef7', 'Appuie sur la carte "Journée en cours"', "Elle apparaît chaque jour en haut de l'accueil")}
+        ${_stepItem('2', '#4f8ef7', 'Renseigne tes pas, coche ta séance et ta diète', "Tout se remplit dans le modal qui s'ouvre")}
+        ${_stepItem('✓', '#1D9E75', 'Clique sur "Valider ma journée"', "Les infos se copient automatiquement dans le bilan · +5 XP", true)}
+      </div>
+      ${_calloutBox('#4f8ef7', 'ℹ️ Bon à savoir', "Une seule validation par jour. Si l'objectif de pas est atteint tu reçois +10 XP bonus en plus.")}
+    `)}
+    ${_accordionItem('bilan', '📋', 'Mon bilan', 'Remplir, clôturer et envoyer le bilan hebdo', `
+      <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:11px;">
+        ${_stepItem('1', '#4f8ef7', 'Accueil → carte "Mon Bilan"', "Le bilan de la semaine en cours s'ouvre automatiquement")}
+        ${_stepItem('2', '#4f8ef7', 'Remplis chaque jour : poids, eau, pas, diète, training, cardio', 'Sauvegarde automatique à chaque modification')}
+        ${_stepItem('📤', '#378ADD', '"Envoyer au coach" — dans les temps = +20 XP', "Envoie en avance, le jour J ou le lendemain avant l'heure limite pour décrocher le bonus. Envoyé plus tard, ton coach reste prévenu mais sans le bonus XP.", true)}
+        ${_stepItem('🔒', '#1D9E75', '"Clôturer la semaine" — quand tu veux, sans deadline', "Un récap de ta semaine s'affiche avant confirmation (diète tenue, moyenne de pas, séances). Calcule l'XP complet du bilan.", true)}
+      </div>
+      ${_calloutBox('#4f8ef7', 'ℹ️ Bon à savoir', "Les deux boutons sont indépendants : tu peux envoyer au coach sans clôturer, ou clôturer sans envoyer. Un bilan clôturé reste modifiable mais ne peut pas être re-clôturé. Depuis l'historique, tu peux aussi envoyer plus tard un bilan déjà clôturé que tu n'aurais pas encore transmis.")}
+    `)}
+    ${_accordionItem('mensurations', '📐', 'Mensurations', 'Saisir poids et tour de taille', `
+      <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:11px;">
+        ${_stepItem('1', '#4f8ef7', 'Accueil → carte "Mensurations"', 'Historique et graphiques de ton évolution')}
+        ${_stepItem('✓', '#1D9E75', 'Saisis ton poids et ton tour de taille', 'Sauvegarde automatique à chaque saisie', true)}
+      </div>
+      ${_calloutBox('#a78bfa', '💡 Indépendant du bilan', "Tu peux envoyer ou clôturer ton bilan même sans avoir renseigné tes mensurations de la semaine. Renseigne-les régulièrement pour que ton coach suive bien ton évolution.")}
+    `)}
+    ${_accordionItem('titres', '🎖️', 'Niveaux & Titres', 'Montée de niveau et déblocage de titres', `
+      <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:11px;">
+        ${_stepItem('1', '#4f8ef7', 'Accumule des XP pour monter de niveau', "Chaque niveau débloque de nouveaux emblèmes et titres exclusifs")}
+        ${_stepItem('2', '#4f8ef7', 'Accueil → "Ma progression" → Collection', 'Vois tous tes titres débloqués et verrouillés')}
+        ${_stepItem('👑', '#f0a500', "Clique sur un titre débloqué pour l'activer", "Il s'affiche sous ton prénom sur l'accueil et dans le classement", true)}
+      </div>
+      ${_calloutBox('#9333ea', '💎 Titres verrouillés (🔒)', 'Ils se débloquent automatiquement en cumulant des pas, en validant des bilans ou des séances, ou en montant de niveau.')}
+    `)}`;
+}
+
+function renderGuideXP() {
+  const row = (label, sub, xp, color) => `<div style="background:#0f1117;border-radius:10px;padding:11px 13px;display:flex;justify-content:space-between;align-items:center;">
+    <div><div style="font-size:13px;font-weight:600;color:#e8eaf0;">${label}</div><div style="font-size:11px;color:#8892a4;margin-top:2px;">${sub}</div></div>
+    <div style="background:${color}22;border:1px solid ${color}55;border-radius:8px;padding:4px 10px;font-size:13px;font-weight:700;color:${color};white-space:nowrap;">${xp}</div>
+  </div>`;
+  return `
+    <div style="font-size:11px;font-weight:700;color:#555e7a;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Journée</div>
+    <div style="display:flex;flex-direction:column;gap:7px;margin-bottom:14px;">
+      ${row('✅ Journée validée', "Valider ta journée depuis l'accueil", '+5 XP', '#1D9E75')}
+      ${row('🦶 Objectif pas atteint', 'Quota de pas quotidien dépassé', '+10 XP', '#1D9E75')}
+    </div>
+    <div style="font-size:11px;font-weight:700;color:#555e7a;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Bilan — Clôture</div>
+    <div style="display:flex;flex-direction:column;gap:7px;margin-bottom:6px;">
+      ${row('🔒 Clôture de semaine', 'À chaque bilan clôturé', '+50 XP', '#4f8ef7')}
+      ${row('🥗 Diète 6/7 jours', '6 jours de diète tenus dans la semaine', '+15 XP', '#4f8ef7')}
+      ${row('🥗🔥 Diète 7/7 jours', 'Les 7 jours sans exception', '+30 XP', '#4f8ef7')}
+      ${row('💪 Séances complètes', "100% de l'objectif séances de la semaine", '+25 XP', '#4f8ef7')}
+      ${row('👟 Pas cumulés', 'Moyenne quotidienne de la semaine — 1 XP / 500 pas', 'variable', '#4f8ef7')}
+      ${row('🎯 Objectif pas hebdo atteint', 'Moyenne ≥ cible fixée par ton coach', '+20 XP', '#4f8ef7')}
+    </div>
+    <div style="font-size:11px;font-weight:700;color:#555e7a;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;margin-top:10px;">Bilan — Envoi au coach</div>
+    <div style="display:flex;flex-direction:column;gap:7px;margin-bottom:14px;">
+      ${row('⏱️ Dans les temps', "Envoyé en avance, le jour J ou le lendemain avant l'heure limite", '+20 XP', '#4f8ef7')}
+    </div>
+    <div style="font-size:11px;font-weight:700;color:#555e7a;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Streaks bilans</div>
+    <div style="display:flex;flex-direction:column;gap:7px;">
+      ${row("🔥 3 bilans d'affilée", 'Bonus fidélité', '+30 XP', '#f0a500')}
+      ${row("🔥🔥 6 bilans d'affilée", 'Bonus régularité', '+50 XP', '#f0a500')}
+      ${row("🔥🔥🔥 10 bilans d'affilée", 'Bonus champion', '+100 XP', '#f0a500')}
+    </div>`;
+}
+
+function renderSettingsBug() {
+  return `
+    <div style="font-size:14px;color:#8892a4;margin-bottom:14px;line-height:1.5;">Décris le problème rencontré et sur quelle page. Ton coach le recevra directement.</div>
+    <textarea id="bugDesc" placeholder="Ex: Sur la page bilan, le bouton 'Valider' ne répond pas après avoir rempli les champs…"
+      style="width:100%;padding:12px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:10px;font-size:13px;font-family:inherit;resize:none;height:120px;box-sizing:border-box;margin-bottom:12px;"></textarea>
+    <button onclick="envoyerBugReport()" style="width:100%;padding:13px;background:linear-gradient(135deg,#4f8ef7,#2260c8);border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:pointer;">Envoyer le rapport</button>`;
 }
 
 async function envoyerBugReport() {
@@ -696,14 +793,8 @@ async function envoyerBugReport() {
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Envoi...'; }
   try {
     await api('envoyerRapportBug', { message: desc });
-    if (panel) {
-      panel.querySelector('div > div').innerHTML = `<div style="text-align:center;padding:20px 0;">
-        <div style="font-size:40px;margin-bottom:12px;">✅</div>
-        <div style="font-size:16px;font-weight:700;color:#f0f2ff;margin-bottom:8px;">Rapport envoyé !</div>
-        <div style="font-size:13px;color:#8892a4;margin-bottom:20px;">Ton coach a été prévenu.</div>
-        <button onclick="document.getElementById('settingsPanel').remove()" style="background:#2d3142;border:none;border-radius:10px;color:#e8eaf0;font-size:14px;padding:12px 24px;cursor:pointer;">Fermer</button>
-      </div>`;
-    }
+    if (panel) panel.remove();
+    showToast('✅ Rapport envoyé, ton coach a été prévenu.', '#1D9E75');
   } catch(e) {
     if (btn) { btn.disabled = false; btn.textContent = 'Envoyer le rapport'; }
     showToast('Erreur : ' + e.message, '#c0392b');

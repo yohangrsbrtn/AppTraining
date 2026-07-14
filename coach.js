@@ -408,6 +408,10 @@ function renderNotificationsCoach() {
   return `<div id="app">
     ${renderHeader('Notifications', '7 derniers jours', false)}
     <div class="page">
+      <div style="display:flex;gap:8px;margin-bottom:14px;">
+        <button class="btn-secondary" onclick="loadHome()" style="margin:0;flex:1;">← Retour</button>
+        <button class="btn-secondary" onclick="loadNotificationsCoach()" style="margin:0;flex:1;">↻ Rafraîchir</button>
+      </div>
       ${filtresHtml}
       ${logsHtml}
       <button class="btn-secondary" onclick="loadNotificationsCoach()" style="margin-bottom:8px;">↻ Rafraîchir</button>
