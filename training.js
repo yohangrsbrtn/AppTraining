@@ -241,7 +241,10 @@ function sauverT(ligne, colonne, valeur) {
 
 async function validerSeance() {
   try {
-    const check = await apiEtendreBilan('chargerJourneeEnCours');
+    // verifierEtCocherTraining délègue à chargerJourneeEnCours côté serveur pour
+    // trouver la ligne du jour (etendreBilan) — passe par le même verrou que le
+    // reste (chargerBilan/chargerJourneeEnCours) pour éviter tout conflit.
+    const check = await apiEtendreBilan('verifierEtCocherTraining');
     if (check && check.dejaValide) {
       afficherOverlay('⚠️', 'Séance déjà validée', 'Tu as déjà validé une séance aujourd\'hui. Reviens demain !', false);
       return;
@@ -257,10 +260,12 @@ function _effectuerValidation() {
   const colonneDate = parseInt(_tColReps) + 1;
   sauverT(ligneDate, colonneDate, dateStr);
 
-  const seanceNav  = (_tNavData && _tNavData.seances || []).find(s => s.ligne == _tLigneSeance);
+  // XP de la séance (équivalent du logActivite(...,'seance',...) du GAS officiel,
+  // absent jusqu'ici côté PWA — la validation d'une séance ne donnait aucune XP).
+  const seanceNav = (_tNavData && _tNavData.seances || []).find(s => s.ligne == _tLigneSeance);
   const nomSeance  = (_tSeanceData && (_tSeanceData.typeSeance || _tSeanceData.nomSeance)) || (seanceNav && seanceNav.nom) || '';
-  const progLog    = _tFeuilleActive + (nomSeance ? '|' + nomSeance : '');
-  api('validerJournee', { ligne: ligneDate, semaine: _tSemaineActive }).catch(() => {});
+  const programme  = _tFeuilleActive + (nomSeance ? '|' + nomSeance : '');
+  api('validerSeanceActivite', { programme, semaine: _tSemaineActive }).catch(() => {});
 
   afficherOverlay('🏆', 'Séance validée !', 'Toutes tes données ont été enregistrées. Beau boulot !', true);
   setTimeout(() => rafraichirProgressionEtDeblocages(), 600);
