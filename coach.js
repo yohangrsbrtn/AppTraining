@@ -41,26 +41,28 @@ function ouvrirClientDetail(clientId) {
 
 async function verrouilerClientCoach(clientId, clientNom, btn) {
   if (!confirm('🔒 Verrouiller la feuille de ' + clientNom + ' ?\n\nIls ne pourront plus modifier le Google Sheet directement. L\'app continuera de fonctionner normalement.')) return;
+  setPage('loading');
   try {
     const res = await apiAs('verrouilerAccesClient', clientId);
-    if (!res || !res.ok) { showToast('Erreur : ' + (res && res.msg || 'inconnue'), '#c0392b'); return; }
+    if (!res || !res.ok) { setPage('mes-clients'); showToast('Erreur : ' + (res && res.msg || 'inconnue'), '#c0392b'); return; }
     const c = (_mesClients || []).find(cl => cl.id === clientId);
     if (c) c.verrouile = true;
-    showToast('🔒 Feuille verrouillée', '#1D9E75');
     setPage('mes-clients');
-  } catch(e) { showToast('Erreur : ' + e.message, '#c0392b'); }
+    showToast('🔒 Feuille verrouillée', '#1D9E75');
+  } catch(e) { setPage('mes-clients'); showToast('Erreur : ' + e.message, '#c0392b'); }
 }
 
 async function deverrouilerClientCoach(clientId, clientNom, btn) {
   if (!confirm('🔓 Déverrouiller les feuilles de ' + clientNom + ' ?\n\nIls pourront à nouveau modifier leur Google Sheet directement.')) return;
+  setPage('loading');
   try {
     const res = await apiAs('deverrouilerAccesClient', clientId);
-    if (!res || !res.ok) { showToast('Erreur : ' + (res && res.msg || 'inconnue'), '#c0392b'); return; }
+    if (!res || !res.ok) { setPage('mes-clients'); showToast('Erreur : ' + (res && res.msg || 'inconnue'), '#c0392b'); return; }
     const c = (_mesClients || []).find(cl => cl.id === clientId);
     if (c) c.verrouile = false;
-    showToast('🔓 Feuilles déverrouillées', '#1D9E75');
     setPage('mes-clients');
-  } catch(e) { showToast('Erreur : ' + e.message, '#c0392b'); }
+    showToast('🔓 Feuilles déverrouillées', '#1D9E75');
+  } catch(e) { setPage('mes-clients'); showToast('Erreur : ' + e.message, '#c0392b'); }
 }
 
 function renderMesClients() {
