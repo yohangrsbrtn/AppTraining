@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Push Test</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0d0f1a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Push Test">
+<link rel="apple-touch-icon" href="../icons/icon-192.png">
+<style>
+body { background:#0f1117; color:#e8eaf0; font-family:-apple-system,sans-serif; padding:24px; }
+button { display:block; width:100%; padding:16px; margin:12px 0; font-size:16px; font-weight:700; border-radius:12px; border:none; background:#4f6ef7; color:#fff; }
+pre { white-space:pre-wrap; word-break:break-all; background:#1a1d29; padding:12px; border-radius:10px; font-size:12px; }
+</style>
+</head>
+<body>
+<h2>Test isolé du Push API</h2>
+<p id="ctx"></p>
+<button onclick="runTest()">Lancer le test</button>
+<pre id="out">(en attente)</pre>
+
+<script>
+const VAPID = "BHh2EJzrbN6O88VLoUJAryv3tgTdVfsgIkFXnwTLEGtjCi9ePpqB2RFe8frPJYaDVhVFIlnGcXGjSz6XMLKPN38";
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; i++) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
+
+document.getElementById('ctx').textContent =
+  'standalone=' + (window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true) +
+  ' | UA=' + navigator.userAgent;
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+
+async function runTest() {
+  const out = document.getElementById('out');
+  out.textContent = 'en cours...';
+  const log = [];
+  try {
+    log.push('1. Notification.requestPermission()');
+    const perm = await Notification.requestPermission();
+    log.push('   -> ' + perm);
+    if (perm !== 'granted') { out.textContent = log.join('\n'); return; }
+
+    log.push('2. serviceWorker.ready');
+    const reg = await navigator.serviceWorker.ready;
+    log.push('   -> scope=' + reg.scope);
+
+    log.push('3. décodage clé VAPID');
+    const arr = urlBase64ToUint8Array(VAPID);
+    const hex = b => Array.from(b).map(x => x.toString(16).padStart(2,'0')).join('');
+    log.push('   -> len=' + arr.length + ' hex=' + hex(arr));
+
+    log.push('4. pushManager.subscribe()');
+    const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: arr });
+    log.push('   -> OK ! endpoint=' + sub.endpoint.slice(0, 60) + '...');
+  } catch(e) {
+    log.push('   -> ERREUR: ' + e.name + ': ' + e.message);
+  }
+  out.textContent = log.join('\n');
+}
+</script>
+</body>
+</html>
