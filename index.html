@@ -37,7 +37,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 
 /* ── Login ── */
 .login-page { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100dvh; padding:24px; }
-.login-logo { font-size:64px; margin-bottom:16px; }
+.login-logo { width:88px; height:88px; margin-bottom:16px; border-radius:20px; box-shadow:0 8px 24px rgba(0,0,0,.35); }
 .login-title { font-size:24px; font-weight:700; margin-bottom:4px; }
 .login-sub { font-size:14px; color:var(--muted); margin-bottom:40px; }
 .login-form { width:100%; max-width:360px; display:flex; flex-direction:column; gap:12px; }
@@ -291,9 +291,9 @@ function hideLoadingOverlay() {
 function renderLogin() {
   return `
   <div class="login-page">
-    <div class="login-logo">💪</div>
-    <div class="login-title">Mon Training</div>
-    <div class="login-sub">Connecte-toi pour accéder à ton programme</div>
+    <img class="login-logo" src="icons/icon-192.png" alt="">
+    <div class="login-title">Mon Suivi</div>
+    <div class="login-sub">Connecte-toi pour accéder à ton suivi</div>
     <div class="login-form">
       <input id="l-client" type="text" placeholder="Ton prénom" autocomplete="username" autocapitalize="none">
       <input id="l-mdp"    type="password" placeholder="Mot de passe" autocomplete="current-password">
