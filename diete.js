@@ -6,6 +6,13 @@ let _dDetail  = null;
 let _dNom     = '';
 
 async function loadDiete() {
+  if (_pf.diete) {
+    _dDietes  = _pf.diete;
+    _pf.diete = null;
+    _dSubPage = 'list';
+    setPage('diete');
+    return;
+  }
   setPage('diete-loading');
   try {
     _dDietes  = await api('listerDietes');

@@ -8,6 +8,18 @@ let _mDateDebut = '';
 let _mDateFin   = '';
 
 async function loadMensurations() {
+  if (_pf.mens) {
+    _mReleves = _pf.mens;
+    _pf.mens  = null;
+    _mSubPage = 'historique';
+    try {
+      _mDateDebut = localStorage.getItem('mensDateDebut') || '';
+      const today = new Date();
+      _mDateFin = localStorage.getItem('mensDateFin') || isoDate(today);
+    } catch(e) {}
+    setPage('mensurations');
+    return;
+  }
   setPage('mens-loading');
   try {
     _mReleves = await api('chargerMensurations');

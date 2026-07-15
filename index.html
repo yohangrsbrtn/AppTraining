@@ -201,6 +201,12 @@ function enterVueClient(clientId, andThen, retour) {
   _journeeData = null;
   _viewAsClientOverride = clientId;
   _vueClientRetour = retour || 'mes-clients';
+  // Le préchargement est propre à une identité client : on le réinitialise à
+  // chaque bascule pour ne jamais montrer les données préchargées d'un autre
+  // client (loadHome() le fait déjà, mais andThen peut ouvrir bilan/mensurations
+  // directement sans repasser par l'accueil).
+  _pf = { bilan: null, tInfos: null, tFeuilles: null, tSemaines: null, tSeances: null, diete: null, mens: null };
+  _pfStarted = false;
   if (typeof andThen === 'function') andThen();
   else loadHome();
 }
@@ -213,6 +219,8 @@ function exitVueClient() {
   S.data    = _coachSavedState.data;
   _journeeData = _coachSavedState.journeeData;
   _coachSavedState = null;
+  _pf = { bilan: null, tInfos: null, tFeuilles: null, tSemaines: null, tSeances: null, diete: null, mens: null };
+  _pfStarted = false;
   const banner = document.getElementById('coachRetourBanner');
   if (banner) banner.remove();
   setPage(_vueClientRetour || 'mes-clients');
@@ -336,7 +344,50 @@ async function doLogin() {
 // ── Home ──────────────────────────────────────────────────────────────
 let _journeeData = null;
 
+// ── Préchargement (navigation instantanée vers Bilan/Programme/Diète/Mensurations) ──
+// Lancé juste après l'accueil, en arrière-plan. Chaque page consomme sa
+// donnée préchargée une seule fois (setPage direct, sans spinner) puis
+// repasse en fetch normal aux navigations suivantes — les validations/saisies
+// restent toujours en direct, seule la PREMIÈRE ouverture de la session
+// bénéficie du cache.
+let _pf = { bilan: null, tInfos: null, tFeuilles: null, tSemaines: null, tSeances: null, diete: null, mens: null };
+let _pfStarted = false;
+
+function schedulerPrechargement() {
+  if (_pfStarted || (S.isCoach && !_viewAsClientOverride)) return;
+  _pfStarted = true;
+  setTimeout(precharger, 400);
+}
+
+async function precharger() {
+  // chargerBilan ne doit jamais tourner en parallèle de chargerJourneeEnCours
+  // (toutes deux appellent etendreBilan() côté serveur) — à ce stade
+  // chargerJourneeEnCours (dans loadHome) est déjà résolue, donc c'est sûr.
+  try { _pf.bilan = await api('chargerBilan'); } catch(e) {}
+  try {
+    const [infos, feuilles] = await Promise.all([
+      api('chargerInfosActivite'),
+      api('lireFeuillesActives')
+    ]);
+    _pf.tInfos = infos || {};
+    _pf.tFeuilles = Array.isArray(feuilles) ? feuilles : [feuilles].filter(Boolean);
+    const feuilleActive = _pf.tFeuilles[0];
+    if (feuilleActive) {
+      const [semaines, seances] = await Promise.all([
+        api('listerSemaines', { nomFeuille: feuilleActive }),
+        api('listerSeances',  { nomFeuille: feuilleActive })
+      ]);
+      _pf.tSemaines = semaines || [];
+      _pf.tSeances  = seances  || [];
+    }
+  } catch(e) {}
+  try { _pf.diete = await api('listerDietes'); } catch(e) {}
+  try { _pf.mens = await api('chargerMensurations'); } catch(e) {}
+}
+
 async function loadHome() {
+  _pf = { bilan: null, tInfos: null, tFeuilles: null, tSemaines: null, tSeances: null, diete: null, mens: null };
+  _pfStarted = false;
   showLoadingOverlay('Chargement…');
   try {
     // Note : chargerBilan() n'est PAS appelée ici (comme en GAS, qui ne l'appelle
@@ -351,6 +402,7 @@ async function loadHome() {
     _journeeData = journee;
     hideLoadingOverlay();
     setPage('home');
+    schedulerPrechargement();
     // Détection déblocages niveau/titres (clients seulement, pas le coach en vue client)
     if (!S.isCoach && !_viewAsClientOverride) {
       setTimeout(() => verifierDeblocages(S.data.prog), 300);

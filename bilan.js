@@ -5,18 +5,28 @@ let _bilanNotes = {};
 let _prevMeta   = null;
 let _bilanMode  = 'current'; // 'current' | 'previous' | 'history-list' | 'history-detail'
 
+function _appliquerBilan(data) {
+  _prevMeta  = data.prevLigneTitre ? {
+    ligneTitre:   data.prevLigneTitre,
+    semaineLabel: data.prevSemaineLabel,
+    dejaValide:   data.prevDejaValide,
+    targetSunday: data.prevTargetSunday
+  } : null;
+  _bilanMode = 'current';
+  _bilanData = data;
+}
+
 async function loadBilan() {
+  if (_pf.bilan) {
+    _appliquerBilan(_pf.bilan);
+    _pf.bilan = null;
+    setPage('bilan');
+    return;
+  }
   setPage('bilan-loading');
   try {
     const data = await api('chargerBilan');
-    _prevMeta  = data.prevLigneTitre ? {
-      ligneTitre:   data.prevLigneTitre,
-      semaineLabel: data.prevSemaineLabel,
-      dejaValide:   data.prevDejaValide,
-      targetSunday: data.prevTargetSunday
-    } : null;
-    _bilanMode = 'current';
-    _bilanData = data;
+    _appliquerBilan(data);
     setPage('bilan');
   } catch(e) { setPage('home'); }
 }

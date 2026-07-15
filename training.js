@@ -14,6 +14,19 @@ let _tSemaines        = [];
 let _tSeances         = [];
 
 async function loadTraining() {
+  if (_pf.tInfos !== null) {
+    _tInfos    = _pf.tInfos;
+    _tFeuilles = _pf.tFeuilles || [];
+    _tFeuilleActive = _tFeuilles[0] || null;
+    _tSubPage  = 'selector';
+    _tSemaines = _pf.tSemaines || [];
+    _tSeances  = _pf.tSeances  || [];
+    if (!_tSemaineActive && _tSemaines.length) _tSemaineActive = _tSemaines[0];
+    if (!_tLigneSeance   && _tSeances.length)  _tLigneSeance   = _tSeances[0].ligne;
+    _pf.tInfos = null; _pf.tFeuilles = null; _pf.tSemaines = null; _pf.tSeances = null;
+    setPage('training');
+    return;
+  }
   setPage('training-loading');
   try {
     const [infos, feuilles] = await Promise.all([
