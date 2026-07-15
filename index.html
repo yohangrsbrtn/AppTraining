@@ -787,31 +787,44 @@ async function activerNotifications() {
     showToast('Ajoute d\'abord l\'app à ton écran d\'accueil pour activer les notifications.', '#c0392b');
     return;
   }
+  let etape = 'permission';
   try {
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') { showToast('Permission refusée.', '#c0392b'); return; }
-    const messaging = _getFcmMessaging();
-    if (!messaging) { showToast('Erreur d\'initialisation des notifications.', '#c0392b'); return; }
+
+    etape = 'sw-ready';
     const reg = await navigator.serviceWorker.ready;
+
+    etape = 'subscribe-natif';
     // Pré-abonnement natif avec un Uint8Array correctement typé : contourne
     // un bug connu de Safari où le getToken() de Firebase échoue sur la
     // validation de la clé VAPID ("applicationServerKey must contain a
     // valid P-256 public key") à cause de sa propre conversion interne.
     // Si un abonnement existe déjà, Firebase le réutilise directement.
-    if (!(await reg.pushManager.getSubscription())) {
-      await reg.pushManager.subscribe({
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: _urlBase64ToUint8Array(FCM_VAPID_KEY)
       });
     }
+
+    etape = 'firebase-init';
+    const messaging = _getFcmMessaging();
+    if (!messaging) { showToast('Erreur d\'initialisation Firebase.', '#c0392b'); return; }
+
+    etape = 'get-token';
     const token = await messaging.getToken({ vapidKey: FCM_VAPID_KEY, serviceWorkerRegistration: reg });
-    if (!token) { showToast('Impossible de récupérer le jeton de notification.', '#c0392b'); return; }
+    if (!token) { showToast('Jeton vide (étape get-token).', '#c0392b'); return; }
+
+    etape = 'enregistrement-serveur';
     await api('enregistrerPushToken', { fcmToken: token });
+
     localStorage.setItem('at_push_enabled', '1');
     showToast('🔔 Notifications activées', '#1D9E75');
     ouvrirSettings();
   } catch(e) {
-    showToast('Erreur : ' + e.message, '#c0392b');
+    showToast('[' + etape + '] ' + e.name + ' : ' + e.message, '#c0392b');
   }
 }
 
