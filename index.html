@@ -354,17 +354,19 @@ let _pf = { bilan: null, tInfos: null, tFeuilles: null, tSemaines: null, tSeance
 let _pfStarted = false;
 
 function schedulerPrechargement() {
-  if (_pfStarted || (S.isCoach && !_viewAsClientOverride)) return;
+  if (_pfStarted) return;
   _pfStarted = true;
   setTimeout(precharger, 400);
 }
 
 async function precharger() {
-  // chargerBilan ne doit jamais tourner en parallèle de chargerJourneeEnCours
-  // (toutes deux appellent etendreBilan() côté serveur) — à ce stade
-  // chargerJourneeEnCours (dans loadHome) est déjà résolue, donc c'est sûr.
-  try { _pf.bilan = await api('chargerBilan'); } catch(e) {}
-  try {
+  // Les 4 chargements sont indépendants entre eux et peuvent tourner en
+  // parallèle. Seul chargerBilan ne doit jamais tourner EN MÊME TEMPS que
+  // chargerJourneeEnCours (toutes deux appellent etendreBilan() côté
+  // serveur) — à ce stade chargerJourneeEnCours (dans loadHome) est déjà
+  // résolue, donc c'est sûr.
+  const pBilan = api('chargerBilan').then(d => { _pf.bilan = d; }).catch(() => {});
+  const pTraining = (async () => {
     const [infos, feuilles] = await Promise.all([
       api('chargerInfosActivite'),
       api('lireFeuillesActives')
@@ -380,9 +382,10 @@ async function precharger() {
       _pf.tSemaines = semaines || [];
       _pf.tSeances  = seances  || [];
     }
-  } catch(e) {}
-  try { _pf.diete = await api('listerDietes'); } catch(e) {}
-  try { _pf.mens = await api('chargerMensurations'); } catch(e) {}
+  })().catch(() => {});
+  const pDiete = api('listerDietes').then(d => { _pf.diete = d; }).catch(() => {});
+  const pMens  = api('chargerMensurations').then(d => { _pf.mens = d; }).catch(() => {});
+  await Promise.allSettled([pBilan, pTraining, pDiete, pMens]);
 }
 
 async function loadHome() {
