@@ -211,6 +211,7 @@ function renderCollectionPage() {
 // ── Système de déblocage (level-up + titres) ──────────────────────────
 
 function verifierDeblocages(p) {
+  if (typeof modeSimplifieActif === 'function' && modeSimplifieActif()) return;
   p = p || {};
   const deblocages = detecterDeblocagesNiveau(p.niveau || 1);
   const titres = detecterDeblocagesTitres(p.pasTotal||0, p.bilansValidies||0, p.seancesValidees||0, p.niveau||1);

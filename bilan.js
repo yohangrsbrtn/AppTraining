@@ -466,7 +466,7 @@ async function confirmerCloture(ligneTitre) {
       const p = S.data.prog || {};
       verifierDeblocages(Object.assign({}, p, { niveau: result.nouveauNiveau }));
     }
-    afficherXPValidation(result);
+    if (!(typeof modeSimplifieActif === 'function' && modeSimplifieActif())) afficherXPValidation(result);
   } catch(e) {
     showToast('Erreur : ' + e.message, '#c0392b');
     setPage('bilan');

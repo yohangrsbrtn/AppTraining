@@ -442,14 +442,18 @@ function _apresChargementHome() {
     setTimeout(() => verifierDeblocages(S.data.prog), 300);
   }
   // fire-and-forget classement — lit un spreadsheet séparé (LOG_SHEET_ID), safe en concurrent
-  setTimeout(() => {
-    api('listerClassement').then(raw => {
-      const cl = typeof raw === 'string' ? JSON.parse(raw || '[]') : (Array.isArray(raw) ? raw : []);
-      S.data.classement = cl;
-      const el = document.getElementById('top5Home');
-      if (el) el.outerHTML = renderTop5Home(cl);
-    }).catch(() => {});
-  }, 0);
+  // Pas d'appel du tout en mode simplifié (comme le GAS : chargerTop5() n'est
+  // même pas invoquée), pas juste un masquage visuel.
+  if (!modeSimplifieActif()) {
+    setTimeout(() => {
+      api('listerClassement').then(raw => {
+        const cl = typeof raw === 'string' ? JSON.parse(raw || '[]') : (Array.isArray(raw) ? raw : []);
+        S.data.classement = cl;
+        const el = document.getElementById('top5Home');
+        if (el) el.outerHTML = renderTop5Home(cl);
+      }).catch(() => {});
+    }, 0);
+  }
   // Badges coach : chargés en parallèle en arrière-plan, injectés dans le DOM
   // dès que dispo (au lieu de bloquer l'affichage de l'accueil comme avant)
   if (S.isCoach) {
@@ -547,8 +551,22 @@ function renderTop5Home(liste) {
   </div>`;
 }
 
+// ── Mode simplifié ───────────────────────────────────────────────────
+// Réglage par appareil (pas par client, comme dans le GAS officiel) qui
+// cache l'affichage XP/progression/classement — l'XP continue de tourner
+// normalement côté serveur, seul le rendu client est concerné.
+function modeSimplifieActif() {
+  try { return localStorage.getItem('modeSimplifie') === 'true'; } catch(e) { return false; }
+}
+function toggleModeSimplifie() {
+  try { localStorage.setItem('modeSimplifie', modeSimplifieActif() ? 'false' : 'true'); } catch(e) {}
+  ouvrirSettings();
+  if (S.page === 'home') render();
+}
+
 function renderHome() {
   const p = S.data.prog || {};
+  const simplifie = modeSimplifieActif();
   const niveau = p.niveau || 1;
   const tier = typeof niveauToTier === 'function' ? niveauToTier(niveau) : 'debutant';
   const tc = typeof getTierColors === 'function' ? getTierColors(tier) : {c1:'#a8b0c8',c2:'#404858',bar:'linear-gradient(90deg,#808898,#c0c8d8)'};
@@ -575,21 +593,21 @@ function renderHome() {
       padding:14px 16px;margin-bottom:16px;
       box-shadow:inset 0 1px 0 ${tc.c1}88,0 0 28px ${tc.c1}44,0 2px 14px rgba(0,0,0,0.45);">
       <div style="display:flex;align-items:center;gap:14px;">
-        <div onclick="loadProgression()" style="display:flex;align-items:center;gap:14px;flex:1;min-width:0;cursor:pointer;" ontouchstart="this.style.opacity='.75'" ontouchend="this.style.opacity='1'">
-          <div style="flex-shrink:0;">${typeof getBadgeSVG === 'function' ? getBadgeSVG(tier, sz, 'hm') : '⭐'}</div>
+        <div ${simplifie ? '' : 'onclick="loadProgression()"'} style="display:flex;align-items:center;gap:14px;flex:1;min-width:0;cursor:${simplifie ? 'default' : 'pointer'};" ${simplifie ? '' : `ontouchstart="this.style.opacity='.75'" ontouchend="this.style.opacity='1'"`}>
+          ${simplifie ? '' : `<div style="flex-shrink:0;">${typeof getBadgeSVG === 'function' ? getBadgeSVG(tier, sz, 'hm') : '⭐'}</div>`}
           <div style="flex:1;min-width:0;">
             <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
               <span style="font-size:18px;font-weight:700;color:#f0f2ff;">${p.prenom || S.client}</span>
-              ${titreHtml}
+              ${simplifie ? '' : titreHtml}
             </div>
-            <div style="font-size:12px;color:#8892a4;margin-top:2px;">${xpTotal ? xpTotal.toLocaleString('fr') + ' XP' : '—'}</div>
+            ${simplifie ? '' : `<div style="font-size:12px;color:#8892a4;margin-top:2px;">${xpTotal ? xpTotal.toLocaleString('fr') + ' XP' : '—'}</div>
             <div style="margin-top:8px;display:flex;justify-content:space-between;">
               <span style="font-size:10px;color:#8892a4;">Niv. ${niveau}</span>
               <span style="font-size:10px;color:${tc.c1};font-weight:600;">${xpManquant.toLocaleString('fr')} XP → Niv. ${niveau+1}</span>
             </div>
             <div style="height:4px;background:#1e2235;border-radius:2px;overflow:hidden;margin-top:6px;">
               <div style="height:4px;border-radius:2px;width:${xpPct}%;background:${tc.bar};transition:width .6s ease;"></div>
-            </div>
+            </div>`}
           </div>
         </div>
         <button onclick="ouvrirSettings()" style="width:36px;height:36px;background:transparent;border:1px solid #2a2f45;border-radius:9px;padding:0;font-size:17px;margin:0;line-height:36px;color:#555e7a;text-align:center;flex-shrink:0;align-self:flex-start;cursor:pointer;">⚙️</button>
@@ -871,6 +889,17 @@ function ouvrirSettings(tab) {
     <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 20px 0;flex-shrink:0;background:#131929;border:1px solid #2a3050;border-radius:10px;margin:14px 20px 0;">
       <div style="font-size:13px;color:#e8eaf0;padding-bottom:12px;">🔔 Notifications ${notificationsActivees() ? '<span style="color:#1D9E75;font-weight:600;">activées</span>' : '<span style="color:#8892a4;">désactivées</span>'}</div>
       <button onclick="${notificationsActivees() ? 'desactiverNotifications()' : 'activerNotifications()'}" style="background:${notificationsActivees() ? '#2d3142' : 'linear-gradient(135deg,#4f8ef7,#3570d4)'};color:${notificationsActivees() ? '#8892a4' : '#fff'};border:none;font-size:11px;font-weight:600;padding:7px 12px;border-radius:8px;cursor:pointer;margin-bottom:12px;">${notificationsActivees() ? 'Désactiver' : 'Activer'}</button>
+    </div>
+    <div style="padding:10px 20px 0;flex-shrink:0;">
+      <div style="background:#0f1117;border-radius:12px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <div style="font-size:14px;font-weight:600;color:#e8eaf0;">Mode simplifié</div>
+          <div style="font-size:11px;color:#555e7a;margin-top:2px;">Cache XP, progression et classement</div>
+        </div>
+        <div onclick="toggleModeSimplifie()" style="width:48px;height:28px;border-radius:14px;background:${modeSimplifieActif() ? '#3ecf8e' : '#2d3142'};border:1px solid #3a4060;cursor:pointer;position:relative;flex-shrink:0;">
+          <div style="position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:${modeSimplifieActif() ? '#fff' : '#555e7a'};transform:${modeSimplifieActif() ? 'translateX(20px)' : 'none'};transition:transform 0.2s,background 0.2s;"></div>
+        </div>
+      </div>
     </div>
     <div style="display:flex;gap:8px;padding:14px 20px 0;flex-shrink:0;">
       ${tabBtn('guide', 'Fonctionnement', _settingsTab !== 'bug')}
