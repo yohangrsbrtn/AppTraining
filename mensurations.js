@@ -18,6 +18,7 @@ async function loadMensurations() {
       _mDateFin = localStorage.getItem('mensDateFin') || isoDate(today);
     } catch(e) {}
     setPage('mensurations');
+    schedulerPrechargement();
     return;
   }
   setPage('mens-loading');
@@ -30,6 +31,7 @@ async function loadMensurations() {
       _mDateFin = localStorage.getItem('mensDateFin') || isoDate(today);
     } catch(e) {}
     setPage('mensurations');
+    schedulerPrechargement();
   } catch(e) { setPage('home'); }
 }
 

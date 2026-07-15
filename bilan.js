@@ -21,6 +21,7 @@ async function loadBilan() {
     _appliquerBilan(_pf.bilan);
     _pf.bilan = null;
     setPage('bilan');
+    schedulerPrechargement();
     return;
   }
   setPage('bilan-loading');
@@ -28,6 +29,7 @@ async function loadBilan() {
     const data = await apiEtendreBilan('chargerBilan');
     _appliquerBilan(data);
     setPage('bilan');
+    schedulerPrechargement();
   } catch(e) { setPage('home'); }
 }
 

@@ -11,6 +11,7 @@ async function loadDiete() {
     _pf.diete = null;
     _dSubPage = 'list';
     setPage('diete');
+    schedulerPrechargement();
     return;
   }
   setPage('diete-loading');
@@ -18,6 +19,7 @@ async function loadDiete() {
     _dDietes  = await api('listerDietes');
     _dSubPage = 'list';
     setPage('diete');
+    schedulerPrechargement();
   } catch(e) { setPage('home'); }
 }
 
