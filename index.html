@@ -203,10 +203,9 @@ function enterVueClient(clientId, andThen, retour) {
   _vueClientRetour = retour || 'mes-clients';
   // Le préchargement est propre à une identité client : on le réinitialise à
   // chaque bascule pour ne jamais montrer les données préchargées d'un autre
-  // client (loadHome() le fait déjà, mais andThen peut ouvrir bilan/mensurations
-  // directement sans repasser par l'accueil).
-  _pf = { bilan: null, tInfos: null, tFeuilles: null, tSemaines: null, tSeances: null, diete: null, mens: null };
-  _pfStarted = false;
+  // client (loadHome() relance le préchargement, mais andThen peut ouvrir
+  // bilan/mensurations directement sans repasser par l'accueil).
+  _resetPrechargement();
   if (typeof andThen === 'function') andThen();
   else loadHome();
 }
@@ -219,8 +218,7 @@ function exitVueClient() {
   S.data    = _coachSavedState.data;
   _journeeData = _coachSavedState.journeeData;
   _coachSavedState = null;
-  _pf = { bilan: null, tInfos: null, tFeuilles: null, tSemaines: null, tSeances: null, diete: null, mens: null };
-  _pfStarted = false;
+  _resetPrechargement();
   const banner = document.getElementById('coachRetourBanner');
   if (banner) banner.remove();
   setPage(_vueClientRetour || 'mes-clients');
@@ -334,6 +332,7 @@ async function doLogin() {
     S.client  = json.client;
     S.token   = json.token;
     S.isCoach = isCoach;
+    _resetPrechargement();
     await loadHome();
   } catch(e) {
     err.textContent = e.message === 'token_invalide' ? 'Identifiants incorrects.' : (e.message || 'Erreur de connexion.');
@@ -345,32 +344,40 @@ async function doLogin() {
 let _journeeData = null;
 
 // ── Préchargement (navigation instantanée vers Bilan/Programme/Diète/Mensurations) ──
-// Lancé juste après l'accueil, en arrière-plan. Chaque page consomme sa
-// donnée préchargée une seule fois (setPage direct, sans spinner) puis
-// repasse en fetch normal aux navigations suivantes — les validations/saisies
-// restent toujours en direct, seule la PREMIÈRE ouverture de la session
-// bénéficie du cache.
+// Se relance à CHAQUE retour à l'accueil (pas juste une fois par session) —
+// donc quel que soit le nombre d'allers-retours, la prochaine page visitée
+// est déjà prête. Chaque page consomme sa donnée préchargée une seule fois
+// (setPage direct, sans spinner) puis repasse en fetch normal si on la
+// revisite sans être repassé par l'accueil entre-temps — les validations et
+// saisies restent, elles, toujours en direct.
 let _pf = { bilan: null, tInfos: null, tFeuilles: null, tSemaines: null, tSeances: null, diete: null, mens: null };
-let _pfStarted = false;
+let _pfInFlight = false;
+let _pfSession  = 0; // incrémenté à chaque bascule d'identité (login, vue client) pour ignorer les résultats d'un préchargement lancé pour un autre client
 
-function schedulerPrechargement() {
-  if (_pfStarted) return;
-  _pfStarted = true;
-  setTimeout(precharger, 400);
+function _resetPrechargement() {
+  _pfSession++;
+  _pf = { bilan: null, tInfos: null, tFeuilles: null, tSemaines: null, tSeances: null, diete: null, mens: null };
+  _pfInFlight = false;
 }
 
-async function precharger() {
+function schedulerPrechargement() {
+  if (_pfInFlight) return;
+  _pfInFlight = true;
+  const maSession = _pfSession;
+  setTimeout(() => { precharger(maSession).finally(() => { _pfInFlight = false; }); }, 400);
+}
+
+async function precharger(maSession) {
   // Les 4 chargements sont indépendants entre eux et peuvent tourner en
-  // parallèle. Seul chargerBilan ne doit jamais tourner EN MÊME TEMPS que
-  // chargerJourneeEnCours (toutes deux appellent etendreBilan() côté
-  // serveur) — à ce stade chargerJourneeEnCours (dans loadHome) est déjà
-  // résolue, donc c'est sûr.
-  const pBilan = api('chargerBilan').then(d => { _pf.bilan = d; }).catch(() => {});
+  // parallèle. chargerBilan passe par apiEtendreBilan (voir api.js) pour ne
+  // jamais tourner en même temps que chargerJourneeEnCours.
+  const pBilan = apiEtendreBilan('chargerBilan').then(d => { if (_pfSession === maSession) _pf.bilan = d; }).catch(() => {});
   const pTraining = (async () => {
     const [infos, feuilles] = await Promise.all([
       api('chargerInfosActivite'),
       api('lireFeuillesActives')
     ]);
+    if (_pfSession !== maSession) return;
     _pf.tInfos = infos || {};
     _pf.tFeuilles = Array.isArray(feuilles) ? feuilles : [feuilles].filter(Boolean);
     const feuilleActive = _pf.tFeuilles[0];
@@ -379,27 +386,26 @@ async function precharger() {
         api('listerSemaines', { nomFeuille: feuilleActive }),
         api('listerSeances',  { nomFeuille: feuilleActive })
       ]);
+      if (_pfSession !== maSession) return;
       _pf.tSemaines = semaines || [];
       _pf.tSeances  = seances  || [];
     }
   })().catch(() => {});
-  const pDiete = api('listerDietes').then(d => { _pf.diete = d; }).catch(() => {});
-  const pMens  = api('chargerMensurations').then(d => { _pf.mens = d; }).catch(() => {});
+  const pDiete = api('listerDietes').then(d => { if (_pfSession === maSession) _pf.diete = d; }).catch(() => {});
+  const pMens  = api('chargerMensurations').then(d => { if (_pfSession === maSession) _pf.mens = d; }).catch(() => {});
   await Promise.allSettled([pBilan, pTraining, pDiete, pMens]);
 }
 
 async function loadHome() {
-  _pf = { bilan: null, tInfos: null, tFeuilles: null, tSemaines: null, tSeances: null, diete: null, mens: null };
-  _pfStarted = false;
   showLoadingOverlay('Chargement…');
   try {
     // Note : chargerBilan() n'est PAS appelée ici (comme en GAS, qui ne l'appelle
     // que sur la page Bilan) — chargerBilan et chargerJourneeEnCours appellent
-    // toutes les deux etendreBilan() côté serveur ; les lancer en parallèle
-    // provoque des écritures concurrentes qui font planter la feuille.
+    // toutes les deux etendreBilan() côté serveur ; apiEtendreBilan() (api.js)
+    // les sérialise pour empêcher toute écriture concurrente.
     const [prog, journee] = await Promise.all([
       api('chargerProgressionClient'),
-      api('chargerJourneeEnCours')
+      apiEtendreBilan('chargerJourneeEnCours')
     ]);
     S.data.prog  = prog;
     _journeeData = journee;
@@ -1003,6 +1009,7 @@ function deconnexion() {
   localStorage.removeItem('at_client');
   localStorage.removeItem('at_coach');
   S.client = ''; S.token = ''; S.isCoach = false; S.data = {};
+  _resetPrechargement();
   setPage('login');
 }
 

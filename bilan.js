@@ -25,7 +25,7 @@ async function loadBilan() {
   }
   setPage('bilan-loading');
   try {
-    const data = await api('chargerBilan');
+    const data = await apiEtendreBilan('chargerBilan');
     _appliquerBilan(data);
     setPage('bilan');
   } catch(e) { setPage('home'); }

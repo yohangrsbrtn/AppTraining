@@ -239,7 +239,7 @@ function sauverT(ligne, colonne, valeur) {
 
 async function validerSeance() {
   try {
-    const check = await api('chargerJourneeEnCours');
+    const check = await apiEtendreBilan('chargerJourneeEnCours');
     if (check && check.dejaValide) {
       afficherOverlay('⚠️', 'Séance déjà validée', 'Tu as déjà validé une séance aujourd\'hui. Reviens demain !', false);
       return;
