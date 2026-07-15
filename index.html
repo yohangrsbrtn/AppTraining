@@ -25,8 +25,9 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 #app { min-height: 100dvh; display: flex; flex-direction: column; }
 
 /* ── Spinner ── */
-.spinner { display:flex; align-items:center; justify-content:center; height:100dvh; }
-.spin { width:36px; height:36px; border:3px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; }
+.spinner-full { display:flex; align-items:center; justify-content:center; height:100dvh; }
+.spinner-inline { display:flex; align-items:center; justify-content:center; padding:50px 0; }
+.spin { width:30px; height:30px; border:3px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; }
 @keyframes spin { to { transform:rotate(360deg); } }
 @keyframes fadeInModal { from { opacity:0; } to { opacity:1; } }
 @keyframes popIn { 0% { transform:scale(0.2) rotate(-8deg); opacity:0; } 70% { transform:scale(1.08) rotate(2deg); } 100% { transform:scale(1) rotate(0); opacity:1; } }
@@ -221,7 +222,7 @@ function exitVueClient() {
 function render() {
   const app = document.getElementById('app');
   switch (S.page) {
-    case 'loading':       app.innerHTML = renderSpinner(); break;
+    case 'loading':       app.innerHTML = renderFullSpinner(); break;
     case 'login':         app.innerHTML = renderLogin();   bindLogin(); break;
     case 'home':          document.body.innerHTML = renderHome(); break;
     case 'training':
@@ -248,8 +249,36 @@ function render() {
 }
 
 // ── Spinner ───────────────────────────────────────────────────────────
+// Spinner léger utilisé À L'INTÉRIEUR d'une page déjà affichée (header/nav
+// visibles), pas un remplacement plein écran.
 function renderSpinner() {
-  return `<div class="spinner"><div class="spin"></div></div>`;
+  return `<div class="spinner-inline"><div class="spin"></div></div>`;
+}
+
+// Spinner plein écran, uniquement pour l'état initial avant tout rendu (S.page
+// démarre à 'loading' avant la connexion) — ne doit plus être atteint en pratique.
+function renderFullSpinner() {
+  return `<div class="spinner-full"><div class="spin"></div></div>`;
+}
+
+// ── Overlay de chargement (façon GAS) ───────────────────────────────────
+// Petite fenêtre pop-up centrée avec fond grisé, pour les actions/navigations
+// courtes (verrouiller un client, changer de page coach, etc.) — la page en
+// cours reste visible en arrière-plan, pas de flash plein écran.
+function showLoadingOverlay(message) {
+  hideLoadingOverlay();
+  const el = document.createElement('div');
+  el.id = 'loadingOverlay';
+  el.style.cssText = 'position:fixed;inset:0;background:rgba(8,9,15,0.6);backdrop-filter:blur(1.5px);display:flex;align-items:center;justify-content:center;z-index:9997;animation:fadeInModal .15s ease;';
+  el.innerHTML = `<div style="background:#1a1d29;border:1px solid var(--border);border-radius:18px;padding:26px 30px;text-align:center;min-width:180px;max-width:260px;box-shadow:0 16px 50px rgba(0,0,0,.5);">
+    <div class="spin" style="margin:0 auto 14px;"></div>
+    <div style="font-size:13px;font-weight:600;color:#e8eaf0;">${esc(message || 'Chargement…')}</div>
+  </div>`;
+  document.body.appendChild(el);
+}
+function hideLoadingOverlay() {
+  const el = document.getElementById('loadingOverlay');
+  if (el) el.remove();
 }
 
 // ── Login ─────────────────────────────────────────────────────────────
@@ -308,7 +337,7 @@ async function doLogin() {
 let _journeeData = null;
 
 async function loadHome() {
-  setPage('loading');
+  showLoadingOverlay('Chargement…');
   try {
     // Note : chargerBilan() n'est PAS appelée ici (comme en GAS, qui ne l'appelle
     // que sur la page Bilan) — chargerBilan et chargerJourneeEnCours appellent
@@ -320,6 +349,7 @@ async function loadHome() {
     ]);
     S.data.prog  = prog;
     _journeeData = journee;
+    hideLoadingOverlay();
     setPage('home');
     // Détection déblocages niveau/titres (clients seulement, pas le coach en vue client)
     if (!S.isCoach && !_viewAsClientOverride) {
@@ -359,6 +389,7 @@ async function loadHome() {
       }).catch(() => { S.data.notifsNonLues = 0; });
     }
   } catch(e) {
+    hideLoadingOverlay();
     localStorage.removeItem('at_token');
     setPage('login');
   }
@@ -563,12 +594,13 @@ function renderHome() {
 
 // ── Classement ────────────────────────────────────────────────────────
 async function loadClassement() {
-  setPage('loading');
+  showLoadingOverlay('Chargement…');
   try {
     const raw = await api('listerClassement');
     S.data.classement = typeof raw === 'string' ? JSON.parse(raw || '[]') : (Array.isArray(raw) ? raw : []);
+    hideLoadingOverlay();
     setPage('classement');
-  } catch(e) { setPage('home'); }
+  } catch(e) { hideLoadingOverlay(); setPage('home'); }
 }
 
 function renderClassement() {
@@ -806,15 +838,17 @@ async function envoyerBugReport() {
 }
 
 // ── Journée en cours modal ────────────────────────────────────────────
-async function ouvrirJourneeModal() {
+function ouvrirJourneeModal() {
   if (!_journeeData || _journeeData.aucun) return;
   if (_journeeData.valide) return; // déjà validée, la carte l'affiche
-  // Rafraîchir les valeurs de la ligne (léger, ne touche pas etendreBilan)
-  try {
-    const fresh = await api('chargerDonneesJournee', { ligne: _journeeData.ligne });
+  // La fenêtre s'ouvre tout de suite avec les données déjà connues (celles de
+  // la carte accueil) ; on rafraîchit ensuite en arrière-plan sans bloquer.
+  _afficherModalJournee(true);
+  api('chargerDonneesJournee', { ligne: _journeeData.ligne }).then(fresh => {
     if (fresh) { _journeeData.diete = fresh.diete; _journeeData.steps = fresh.steps; _journeeData.training = fresh.training; _journeeData.cardio = fresh.cardio; }
-  } catch(e) {}
-  _afficherModalJournee();
+  }).catch(() => {}).finally(() => {
+    if (document.getElementById('modalJournee')) _afficherModalJournee(false);
+  });
 }
 
 function _majCarteJournee() {
@@ -822,7 +856,7 @@ function _majCarteJournee() {
   if (carte) carte.outerHTML = renderCarteJournee(_journeeData);
 }
 
-function _afficherModalJournee() {
+function _afficherModalJournee(refreshing) {
   const existant = document.getElementById('modalJournee');
   if (existant) existant.remove();
   const d = _journeeData;
@@ -835,7 +869,10 @@ function _afficherModalJournee() {
     <div style="background:#1a1f35;border-radius:20px 20px 0 0;padding:24px 20px calc(32px + env(safe-area-inset-bottom));width:100%;max-width:500px;margin:0 auto;box-sizing:border-box;">
       <div style="width:36px;height:4px;background:#2d3142;border-radius:2px;margin:0 auto 20px;"></div>
       <div style="font-size:11px;font-weight:600;color:#555e7a;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Journée en cours</div>
-      <div style="font-size:18px;font-weight:700;color:#f0f2ff;margin-bottom:20px;">${jourNom}</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:20px;">
+        <div style="font-size:18px;font-weight:700;color:#f0f2ff;">${jourNom}</div>
+        ${refreshing ? `<div class="spin" style="width:14px;height:14px;border-width:2px;"></div>` : ''}
+      </div>
       <div style="display:flex;gap:8px;margin-bottom:16px;">
         <button id="jTogDiete" onclick="toggleJourneeField('diete')" style="flex:1;padding:12px 6px;border:none;border-radius:10px;color:#e8eaf0;font-size:13px;font-weight:600;cursor:pointer;background:${d.diete?'#1D9E75':'#2d3142'};">${d.diete?'✓ ':''}Diète</button>
         <button id="jTogTraining" onclick="toggleJourneeField('training')" style="flex:1;padding:12px 6px;border:none;border-radius:10px;color:#e8eaf0;font-size:13px;font-weight:600;cursor:pointer;background:${d.training?'#1D9E75':'#2d3142'};">${d.training?'✓ ':''}Training</button>

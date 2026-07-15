@@ -23,12 +23,13 @@ let _mesClients = null;
 let _clientSelectionne = null; // { id, nom, niveau, ... }
 
 async function loadMesClients() {
-  setPage('loading');
+  showLoadingOverlay('Chargement…');
   try {
     const raw = await api('listerClientsAvecNiveaux');
     _mesClients = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    hideLoadingOverlay();
     setPage('mes-clients');
-  } catch(e) { setPage('home'); }
+  } catch(e) { hideLoadingOverlay(); setPage('home'); }
 }
 
 // Comme en GAS (allerVersClient) : cliquer sur un client bascule directement
@@ -41,28 +42,30 @@ function ouvrirClientDetail(clientId) {
 
 async function verrouilerClientCoach(clientId, clientNom, btn) {
   if (!confirm('🔒 Verrouiller la feuille de ' + clientNom + ' ?\n\nIls ne pourront plus modifier le Google Sheet directement. L\'app continuera de fonctionner normalement.')) return;
-  setPage('loading');
+  showLoadingOverlay('Verrouillage en cours…');
   try {
     const res = await apiAs('verrouilerAccesClient', clientId);
-    if (!res || !res.ok) { setPage('mes-clients'); showToast('Erreur : ' + (res && res.msg || 'inconnue'), '#c0392b'); return; }
+    hideLoadingOverlay();
+    if (!res || !res.ok) { showToast('Erreur : ' + (res && res.msg || 'inconnue'), '#c0392b'); return; }
     const c = (_mesClients || []).find(cl => cl.id === clientId);
     if (c) c.verrouile = true;
     setPage('mes-clients');
     showToast('🔒 Feuille verrouillée', '#1D9E75');
-  } catch(e) { setPage('mes-clients'); showToast('Erreur : ' + e.message, '#c0392b'); }
+  } catch(e) { hideLoadingOverlay(); showToast('Erreur : ' + e.message, '#c0392b'); }
 }
 
 async function deverrouilerClientCoach(clientId, clientNom, btn) {
   if (!confirm('🔓 Déverrouiller les feuilles de ' + clientNom + ' ?\n\nIls pourront à nouveau modifier leur Google Sheet directement.')) return;
-  setPage('loading');
+  showLoadingOverlay('Déverrouillage en cours…');
   try {
     const res = await apiAs('deverrouilerAccesClient', clientId);
-    if (!res || !res.ok) { setPage('mes-clients'); showToast('Erreur : ' + (res && res.msg || 'inconnue'), '#c0392b'); return; }
+    hideLoadingOverlay();
+    if (!res || !res.ok) { showToast('Erreur : ' + (res && res.msg || 'inconnue'), '#c0392b'); return; }
     const c = (_mesClients || []).find(cl => cl.id === clientId);
     if (c) c.verrouile = false;
     setPage('mes-clients');
     showToast('🔓 Feuilles déverrouillées', '#1D9E75');
-  } catch(e) { setPage('mes-clients'); showToast('Erreur : ' + e.message, '#c0392b'); }
+  } catch(e) { hideLoadingOverlay(); showToast('Erreur : ' + e.message, '#c0392b'); }
 }
 
 function renderMesClients() {
@@ -114,12 +117,13 @@ let _centreBilansData = null;
 let _coachBilanClientVu = null; // client dont on voit le bilan
 
 async function loadCentreBilans() {
-  setPage('loading');
+  showLoadingOverlay('Chargement…');
   try {
     _centreBilansData = await api('listerBilansCoach');
     _coachBilansCount = (_centreBilansData || []).filter(b => !b.coachTraite).length;
+    hideLoadingOverlay();
     setPage('centre-bilans');
-  } catch(e) { setPage('home'); }
+  } catch(e) { hideLoadingOverlay(); setPage('home'); }
 }
 
 async function marquerTraiteCoach(clientId, ts) {
@@ -235,14 +239,15 @@ let _notifData = null;
 let _notifFiltre = null;
 
 async function loadNotificationsCoach() {
-  setPage('loading');
+  showLoadingOverlay('Chargement…');
   try {
     _notifData   = await api('chargerTousLesLogs');
     _notifFiltre = null;
     api('marquerNotifsLues').catch(() => {});
     S.data.notifsNonLues = 0;
+    hideLoadingOverlay();
     setPage('notifications-coach');
-  } catch(e) { setPage('home'); }
+  } catch(e) { hideLoadingOverlay(); setPage('home'); }
 }
 
 function renderNotificationsCoach() {
@@ -357,15 +362,16 @@ function voirMensurationsClient(clientId, nom) {
 let _rapportsBugsData = null;
 
 async function loadRapportsBugs() {
-  setPage('loading');
+  showLoadingOverlay('Chargement…');
   try {
     _rapportsBugsData = await api('chargerRapportsBugs');
+    hideLoadingOverlay();
     setPage('rapports-bugs');
     (_rapportsBugsData.bugs || []).filter(b => !b.lu).forEach(b => {
       api('marquerBugLu', { ligne: b.ligne }).catch(() => {});
     });
     S.data.bugsNonLus = 0;
-  } catch(e) { setPage('home'); }
+  } catch(e) { hideLoadingOverlay(); setPage('home'); }
 }
 
 function renderRapportsBugs() {

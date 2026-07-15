@@ -13,11 +13,12 @@ function getTierColors(tier) {
 }
 
 async function loadProgression() {
-  setPage('loading');
+  showLoadingOverlay('Chargement…');
   try {
     S.data.prog = await api('chargerProgressionClient');
+    hideLoadingOverlay();
     setPage('progression');
-  } catch(e) { setPage('home'); }
+  } catch(e) { hideLoadingOverlay(); setPage('home'); }
 }
 
 // Jauge en demi-cercle (séances / bilans / assiduité) — identique au GAS

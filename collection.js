@@ -54,7 +54,7 @@ const TITRES_DEF = [
 let _colTitreActif = null;
 
 async function loadCollection() {
-  setPage('loading');
+  showLoadingOverlay('Chargement…');
   try {
     if (!S.data.prog) S.data.prog = await api('chargerProgressionClient');
     try {
@@ -62,6 +62,7 @@ async function loadCollection() {
         || (S.data.prog.titreActif || null) || null;
       if (_colTitreActif === '') _colTitreActif = null;
     } catch(e) {}
+    hideLoadingOverlay();
     setPage('collection');
     // Marquer tous les titres/emblèmes débloqués comme vus (retire le badge "🆕" sur Progression)
     const p = S.data.prog || {};
@@ -70,7 +71,7 @@ async function loadCollection() {
     try { localStorage.setItem('seenTitres_' + S.client, totalDebloques); } catch(e) {}
     p.seenTitres = totalDebloques;
     api('sauvegarderSeenTitres', { count: totalDebloques }).catch(() => {});
-  } catch(e) { setPage('home'); }
+  } catch(e) { hideLoadingOverlay(); setPage('home'); }
 }
 
 function _colVal(cat) {
