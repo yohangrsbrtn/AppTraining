@@ -125,21 +125,21 @@ function renderHistorique() {
         <button onclick="loadSaisieMensurations()" style="flex:1;background:linear-gradient(135deg,#378ADD,#2260a8);color:#fff;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:600;cursor:pointer;">Saisir mensurations</button>
       </div>
 
-      <div style="display:flex;gap:8px;margin-bottom:12px;align-items:flex-end;">
-        <div style="flex:1;">
+      <div style="display:flex;gap:6px;margin-bottom:12px;align-items:flex-end;">
+        <div style="flex:1;min-width:0;">
           <div style="font-size:10px;color:#8892a4;text-transform:uppercase;margin-bottom:4px;">Depuis</div>
           <input type="date" id="mensDateDebut" value="${_mDateDebut}"
-            style="width:100%;padding:8px 6px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:8px;font-size:12px;"
+            style="box-sizing:border-box;width:100%;padding:8px 4px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:8px;font-size:11px;"
             onchange="onMensFiltre()">
         </div>
-        <div style="flex:1;">
+        <div style="flex:1;min-width:0;">
           <div style="font-size:10px;color:#8892a4;text-transform:uppercase;margin-bottom:4px;">Jusqu'au</div>
           <input type="date" id="mensDateFin" value="${_mDateFin}"
-            style="width:100%;padding:8px 6px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:8px;font-size:12px;"
+            style="box-sizing:border-box;width:100%;padding:8px 4px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:8px;font-size:11px;"
             onchange="onMensFiltre()">
         </div>
         <button onclick="onMensTout()" id="btnToutePeriode"
-          style="background:#2d3142;border:none;border-radius:8px;color:${_mDateDebut ? '#8892a4' : '#378ADD'};padding:8px 10px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;">
+          style="flex-shrink:0;background:#2d3142;border:none;border-radius:8px;color:${_mDateDebut ? '#8892a4' : '#378ADD'};padding:8px 8px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;">
           Toute la<br>période
         </button>
       </div>
