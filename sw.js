@@ -28,3 +28,14 @@ self.addEventListener('push', e => {
     badge: '/AppTraining/icons/icon-192.png'
   }));
 });
+
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientsArr => {
+      const existant = clientsArr.find(c => c.url.includes('/AppTraining/'));
+      if (existant) return existant.focus();
+      return self.clients.openWindow('/AppTraining/');
+    })
+  );
+});

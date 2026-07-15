@@ -142,6 +142,8 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 </head>
 <body>
 <div id="app"></div>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-messaging-compat.js"></script>
 <script src="api.js"></script>
 <script src="bilan.js"></script>
 <script src="training.js"></script>
@@ -741,6 +743,69 @@ function renderProfil() {
   </div>`;
 }
 
+// ── Notifications push (Firebase Cloud Messaging) ───────────────────────
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCNi28-nmp12JWdkp2I5HzXSJ7II1at4W8",
+  authDomain: "apptraining-push-95e0d.firebaseapp.com",
+  projectId: "apptraining-push-95e0d",
+  storageBucket: "apptraining-push-95e0d.firebasestorage.app",
+  messagingSenderId: "305834460978",
+  appId: "1:305834460978:web:e1031a87209b0bdff8392b"
+};
+const FCM_VAPID_KEY = "BHh2EJzrbN6O88VLoUJAryv3tgTdVfsgIkFXnwTLEGtjCi9ePpqB2RFe8frPJYaDVhVFIlnGcXGjSz6XMLKPN38";
+
+let _fcmMessaging = null;
+function _getFcmMessaging() {
+  if (_fcmMessaging) return _fcmMessaging;
+  if (typeof firebase === 'undefined') return null;
+  if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+  _fcmMessaging = firebase.messaging();
+  return _fcmMessaging;
+}
+
+function notificationsActivees() {
+  return localStorage.getItem('at_push_enabled') === '1' && Notification.permission === 'granted';
+}
+
+async function activerNotifications() {
+  if (!('Notification' in window) || !('serviceWorker' in navigator)) {
+    showToast('Notifications non supportées sur cet appareil.', '#c0392b'); return;
+  }
+  // iOS n'autorise les notifications web QUE pour une PWA installée à l'écran d'accueil
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  if (isIOS && !isStandalone) {
+    showToast('Ajoute d\'abord l\'app à ton écran d\'accueil pour activer les notifications.', '#c0392b');
+    return;
+  }
+  try {
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') { showToast('Permission refusée.', '#c0392b'); return; }
+    const messaging = _getFcmMessaging();
+    if (!messaging) { showToast('Erreur d\'initialisation des notifications.', '#c0392b'); return; }
+    const reg = await navigator.serviceWorker.ready;
+    const token = await messaging.getToken({ vapidKey: FCM_VAPID_KEY, serviceWorkerRegistration: reg });
+    if (!token) { showToast('Impossible de récupérer le jeton de notification.', '#c0392b'); return; }
+    await api('enregistrerPushToken', { fcmToken: token });
+    localStorage.setItem('at_push_enabled', '1');
+    showToast('🔔 Notifications activées', '#1D9E75');
+    ouvrirSettings();
+  } catch(e) {
+    showToast('Erreur : ' + e.message, '#c0392b');
+  }
+}
+
+async function desactiverNotifications() {
+  try {
+    const messaging = _getFcmMessaging();
+    if (messaging) await messaging.deleteToken();
+    await api('enregistrerPushToken', { fcmToken: '' });
+  } catch(e) {}
+  localStorage.removeItem('at_push_enabled');
+  showToast('🔕 Notifications désactivées', '#8892a4');
+  ouvrirSettings();
+}
+
 // ── Paramètres ────────────────────────────────────────────────────────
 // Structure alignée sur le GAS officiel : onglets Fonctionnement/Rapport de
 // bug, sous-onglets L'application (accordéon) / Système XP. Le contenu du
@@ -766,6 +831,10 @@ function ouvrirSettings(tab) {
     <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 20px 0;flex-shrink:0;">
       <div style="font-size:17px;font-weight:700;color:#e8eaf0;">Paramètres</div>
       <button onclick="document.getElementById('settingsPanel').remove()" style="width:30px;height:30px;background:#1e2235;border-radius:50%;padding:0;font-size:15px;margin:0;min-width:unset;line-height:30px;color:#8892a4;border:1px solid #2d3142;cursor:pointer;">✕</button>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 20px 0;flex-shrink:0;background:#131929;border:1px solid #2a3050;border-radius:10px;margin:14px 20px 0;">
+      <div style="font-size:13px;color:#e8eaf0;padding-bottom:12px;">🔔 Notifications ${notificationsActivees() ? '<span style="color:#1D9E75;font-weight:600;">activées</span>' : '<span style="color:#8892a4;">désactivées</span>'}</div>
+      <button onclick="${notificationsActivees() ? 'desactiverNotifications()' : 'activerNotifications()'}" style="background:${notificationsActivees() ? '#2d3142' : 'linear-gradient(135deg,#4f8ef7,#3570d4)'};color:${notificationsActivees() ? '#8892a4' : '#fff'};border:none;font-size:11px;font-weight:600;padding:7px 12px;border-radius:8px;cursor:pointer;margin-bottom:12px;">${notificationsActivees() ? 'Désactiver' : 'Activer'}</button>
     </div>
     <div style="display:flex;gap:8px;padding:14px 20px 0;flex-shrink:0;">
       ${tabBtn('guide', 'Fonctionnement', _settingsTab !== 'bug')}
