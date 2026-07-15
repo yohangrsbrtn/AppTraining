@@ -22,7 +22,7 @@ function renderProtocolePage() {
     return `<div id="app">
       ${renderHeader('Protocole', '', false)}
       <div class="page">
-        <div class="empty"><div class="empty-icon">🧪</div><div class="empty-text">Aucun protocole en cours pour l'instant.</div></div>
+        <div class="empty"><div class="empty-icon">🧬</div><div class="empty-text">Aucun protocole en cours pour l'instant.</div></div>
         <button class="btn-secondary" onclick="loadHome()">← Accueil</button>
       </div>
       ${renderNavBar('home')}
