@@ -153,6 +153,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 <script src="progression.js"></script>
 <script src="collection.js"></script>
 <script src="coach.js"></script>
+<script src="protocole.js"></script>
 <script>
 // ── État global ───────────────────────────────────────────────────────
 const S = {
@@ -253,6 +254,7 @@ function render() {
     case 'notifications-coach':  document.body.innerHTML = renderNotificationsCoach();   break;
     case 'rapports-bugs':        document.body.innerHTML = renderRapportsBugs();         break;
     case 'mes-clients':          document.body.innerHTML = renderMesClients();           break;
+    case 'protocole':            document.body.innerHTML = renderProtocolePage();        break;
   }
 }
 
@@ -647,6 +649,13 @@ function renderHome() {
         <div style="font-size:13px;font-weight:600;color:#e8eaf0;">Recettes</div>
         <div style="font-size:11px;color:#8892a4;margin-top:3px;">Mes recettes coaching</div>
       </div>
+
+      ${p.chimieActif ? `
+      <div onclick="loadProtocole()" ontouchstart="this.style.background='#242838'" ontouchend="this.style.background='#1a1d29'" style="background:#1a1d29;border-radius:12px;padding:18px 14px;text-align:center;cursor:pointer;border-top:3px solid #a78bfa;-webkit-tap-highlight-color:transparent;">
+        <div style="font-size:38px;margin-bottom:8px;line-height:1;">🧪</div>
+        <div style="font-size:13px;font-weight:600;color:#e8eaf0;">Protocole</div>
+        <div style="font-size:11px;color:#8892a4;margin-top:3px;">Cycle en cours</div>
+      </div>` : ''}
 
       ${S.isCoach ? `
       <div onclick="loadMesClients()" ontouchstart="this.style.background='#242838'" ontouchend="this.style.background='#1a1d29'" style="background:#1a1d29;border-radius:12px;padding:18px 14px;text-align:center;cursor:pointer;border-top:3px solid #4f8ef7;-webkit-tap-highlight-color:transparent;">

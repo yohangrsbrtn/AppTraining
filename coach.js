@@ -68,6 +68,20 @@ async function deverrouilerClientCoach(clientId, clientNom, btn) {
   } catch(e) { hideLoadingOverlay(); showToast('Erreur : ' + e.message, '#c0392b'); }
 }
 
+async function toggleChimieClientCoach(clientId, clientNom) {
+  const c = (_mesClients || []).find(cl => cl.id === clientId);
+  const nouvelEtat = !(c && c.chimieActif);
+  showLoadingOverlay(nouvelEtat ? 'Activation…' : 'Désactivation…');
+  try {
+    const res = await apiAs('definirChimieActif', clientId, { actif: nouvelEtat });
+    hideLoadingOverlay();
+    if (!res || !res.ok) { showToast('Erreur : ' + (res && res.msg || 'inconnue'), '#c0392b'); return; }
+    if (c) c.chimieActif = nouvelEtat;
+    setPage('mes-clients');
+    showToast(nouvelEtat ? '🧪 Protocole activé pour ' + clientNom : '🧪 Protocole désactivé pour ' + clientNom, '#1D9E75');
+  } catch(e) { hideLoadingOverlay(); showToast('Erreur : ' + e.message, '#c0392b'); }
+}
+
 function renderMesClients() {
   const clients = (_mesClients || []).filter(c => c.id !== getClient());
 
@@ -83,6 +97,8 @@ function renderMesClients() {
       ? `<button onclick="event.stopPropagation();deverrouilerClientCoach('${c.id}','${esc(c.nom)}',this)" style="width:30px;height:30px;background:#2d1a0e;border:1.5px solid #c0601a;border-radius:8px;font-size:14px;padding:0;margin:0;min-width:unset;cursor:pointer;flex-shrink:0;" title="Déverrouiller l'accès à la feuille">🔒</button>`
       : `<button onclick="event.stopPropagation();verrouilerClientCoach('${c.id}','${esc(c.nom)}',this)" style="width:30px;height:30px;background:#1e2235;border:1px solid #2d3142;border-radius:8px;font-size:14px;padding:0;margin:0;min-width:unset;cursor:pointer;flex-shrink:0;" title="Verrouiller l'accès à la feuille">🔒</button>`;
 
+    const chimieBtn = `<button onclick="event.stopPropagation();toggleChimieClientCoach('${c.id}','${esc(c.nom)}')" style="width:30px;height:30px;background:${c.chimieActif ? '#2a1a3d' : '#1e2235'};border:1px solid ${c.chimieActif ? '#a78bfa' : '#2d3142'};border-radius:8px;font-size:14px;padding:0;margin:0;min-width:unset;cursor:pointer;flex-shrink:0;opacity:${c.chimieActif ? '1' : '.5'};" title="${c.chimieActif ? 'Désactiver' : 'Activer'} le protocole">🧪</button>`;
+
     return `<div onclick="ouvrirClientDetail('${c.id}')"
       class="card" style="padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;cursor:pointer;-webkit-tap-highlight-color:transparent;"
       ontouchstart="this.style.opacity='.75'" ontouchend="this.style.opacity='1'">
@@ -93,6 +109,7 @@ function renderMesClients() {
       <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
         <div style="font-size:11px;font-weight:700;color:#8892a4;">Niv.&nbsp;${c.niveau || 1}</div>
         ${typeof getBadgeSVG === 'function' ? getBadgeSVG(tier, 36, 'cl'+c.id) : ''}
+        ${chimieBtn}
         ${lockBtn}
       </div>
     </div>`;
