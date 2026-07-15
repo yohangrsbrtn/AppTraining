@@ -801,11 +801,14 @@ async function activerNotifications() {
     // validation de la clé VAPID ("applicationServerKey must contain a
     // valid P-256 public key") à cause de sa propre conversion interne.
     // Si un abonnement existe déjà, Firebase le réutilise directement.
+    const keyArr = _urlBase64ToUint8Array(FCM_VAPID_KEY);
+    const toHex = b => Array.from(b).map(x => x.toString(16).padStart(2,'0')).join('');
+    etape = 'subscribe-natif (clé: len=' + keyArr.length + ' début=' + toHex(keyArr.slice(0,4)) + ' fin=' + toHex(keyArr.slice(-4)) + ')';
     let sub = await reg.pushManager.getSubscription();
     if (!sub) {
       sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: _urlBase64ToUint8Array(FCM_VAPID_KEY)
+        applicationServerKey: keyArr
       });
     }
 
