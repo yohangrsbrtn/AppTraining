@@ -142,8 +142,8 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 </head>
 <body>
 <div id="app"></div>
-<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-messaging-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.16.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.16.0/firebase-messaging-compat.js"></script>
 <script src="api.js"></script>
 <script src="bilan.js"></script>
 <script src="training.js"></script>
@@ -754,6 +754,15 @@ const FIREBASE_CONFIG = {
 };
 const FCM_VAPID_KEY = "BHh2EJzrbN6O88VLoUJAryv3tgTdVfsgIkFXnwTLEGtjCi9ePpqB2RFe8frPJYaDVhVFIlnGcXGjSz6XMLKPN38";
 
+function _urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; i++) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
+
 let _fcmMessaging = null;
 function _getFcmMessaging() {
   if (_fcmMessaging) return _fcmMessaging;
@@ -784,6 +793,17 @@ async function activerNotifications() {
     const messaging = _getFcmMessaging();
     if (!messaging) { showToast('Erreur d\'initialisation des notifications.', '#c0392b'); return; }
     const reg = await navigator.serviceWorker.ready;
+    // Pré-abonnement natif avec un Uint8Array correctement typé : contourne
+    // un bug connu de Safari où le getToken() de Firebase échoue sur la
+    // validation de la clé VAPID ("applicationServerKey must contain a
+    // valid P-256 public key") à cause de sa propre conversion interne.
+    // Si un abonnement existe déjà, Firebase le réutilise directement.
+    if (!(await reg.pushManager.getSubscription())) {
+      await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: _urlBase64ToUint8Array(FCM_VAPID_KEY)
+      });
+    }
     const token = await messaging.getToken({ vapidKey: FCM_VAPID_KEY, serviceWorkerRegistration: reg });
     if (!token) { showToast('Impossible de récupérer le jeton de notification.', '#c0392b'); return; }
     await api('enregistrerPushToken', { fcmToken: token });
