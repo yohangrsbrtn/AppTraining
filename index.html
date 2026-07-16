@@ -676,7 +676,10 @@ function toggleModeSimplifie() {
   if (S.page === 'home') render();
 }
 
-function renderHome() {
+// Carte header (badge, nom, titre, XP, barre de niveau) — extraite pour
+// pouvoir être rafraîchie en place (_majCarteHeader) sans re-render toute la
+// page, dès que S.data.prog change (XP gagné) pendant qu'on est sur l'accueil.
+function renderCarteHeader() {
   const p = S.data.prog || {};
   const simplifie = modeSimplifieActif();
   const niveau = p.niveau || 1;
@@ -689,11 +692,8 @@ function renderHome() {
   const titreId = p.titreActif || ((() => { try { return localStorage.getItem('titreActif_' + S.client) || null; } catch(e) { return null; } })());
   const titreDef = titreId && typeof TITRES_DEF !== 'undefined' ? TITRES_DEF.find(t => t.id === titreId) : null;
   const titreHtml = titreDef ? renderTitrePill(titreDef, false) : '';
-  const nBilans = S.data.coachBilansCount || 0;
 
-  return `<div id="app" style="background:#0f1117;min-height:100dvh;padding:16px 16px calc(20px + env(safe-area-inset-bottom));max-width:500px;margin:0 auto;padding-top:calc(16px + env(safe-area-inset-top));">
-
-    <div style="
+  return `<div id="carteHeaderHome" style="
       background:linear-gradient(145deg,#131825 0%,${tc.c2}99 30%,${tc.c2}ee 50%,${tc.c2}99 70%,#131825 100%);
       border-radius:12px;border-top:4px solid ${tc.c1};
       border-left:1px solid ${tc.c1}33;border-right:1px solid ${tc.c1}33;border-bottom:1px solid ${tc.c1}22;
@@ -719,7 +719,21 @@ function renderHome() {
         </div>
         <button onclick="ouvrirSettings()" style="width:36px;height:36px;background:transparent;border:1px solid #2a2f45;border-radius:9px;padding:0;margin:0;display:flex;align-items:center;justify-content:center;flex-shrink:0;align-self:flex-start;cursor:pointer;">${ICONE_PARAMETRES}</button>
       </div>
-    </div>
+    </div>`;
+}
+
+function _majCarteHeader() {
+  const carte = document.getElementById('carteHeaderHome');
+  if (carte) carte.outerHTML = renderCarteHeader();
+}
+
+function renderHome() {
+  const p = S.data.prog || {};
+  const nBilans = S.data.coachBilansCount || 0;
+
+  return `<div id="app" style="background:#0f1117;min-height:100dvh;padding:16px 16px calc(20px + env(safe-area-inset-bottom));max-width:500px;margin:0 auto;padding-top:calc(16px + env(safe-area-inset-top));">
+
+    ${renderCarteHeader()}
 
     ${renderCarteJournee(_journeeData)}
 
@@ -1178,13 +1192,11 @@ function _afficherModalJournee(refreshing) {
   modal.id = 'modalJournee';
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:flex;align-items:flex-end;';
   modal.innerHTML = `
-    <div style="background:#1a1f35;border-radius:20px 20px 0 0;padding:24px 20px calc(32px + env(safe-area-inset-bottom));width:100%;max-width:500px;margin:0 auto;box-sizing:border-box;">
+    <div style="position:relative;background:#1a1f35;border-radius:20px 20px 0 0;padding:24px 20px calc(32px + env(safe-area-inset-bottom));width:100%;max-width:500px;margin:0 auto;box-sizing:border-box;">
+      ${refreshing ? `<div style="position:absolute;inset:0;background:rgba(26,31,53,0.85);border-radius:20px 20px 0 0;z-index:2;display:flex;align-items:center;justify-content:center;"><div class="spin"></div></div>` : ''}
       <div style="width:36px;height:4px;background:#2d3142;border-radius:2px;margin:0 auto 20px;"></div>
       <div style="font-size:11px;font-weight:600;color:#555e7a;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Journée en cours</div>
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:20px;">
-        <div style="font-size:18px;font-weight:700;color:#f0f2ff;">${jourNom}</div>
-        ${refreshing ? `<div class="spin" style="width:14px;height:14px;border-width:2px;"></div>` : ''}
-      </div>
+      <div style="font-size:18px;font-weight:700;color:#f0f2ff;margin-bottom:20px;">${jourNom}</div>
       <div style="display:flex;gap:8px;margin-bottom:16px;">
         <button id="jTogDiete" onclick="toggleJourneeField('diete')" style="flex:1;padding:12px 6px;border:none;border-radius:10px;color:#e8eaf0;font-size:13px;font-weight:600;cursor:pointer;background:${d.diete?'#1D9E75':'#2d3142'};">${d.diete?'✓ ':''}Diète</button>
         <button id="jTogTraining" onclick="toggleJourneeField('training')" style="flex:1;padding:12px 6px;border:none;border-radius:10px;color:#e8eaf0;font-size:13px;font-weight:600;cursor:pointer;background:${d.training?'#1D9E75':'#2d3142'};">${d.training?'✓ ':''}Training</button>

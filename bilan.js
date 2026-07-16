@@ -462,9 +462,11 @@ async function confirmerCloture(ligneTitre) {
       return;
     }
     await loadBilan();
-    if (result.nouveauNiveau && typeof verifierDeblocages === 'function') {
-      const p = S.data.prog || {};
-      verifierDeblocages(Object.assign({}, p, { niveau: result.nouveauNiveau }));
+    // Re-fetch complet (XP total, %, niveau) plutôt que de ne patcher que le
+    // niveau localement — sinon S.data.prog reste incohérent (niveau à jour
+    // mais XP/barre périmés) si l'utilisateur revient ensuite à l'accueil.
+    if (result.nouveauNiveau && typeof rafraichirProgressionEtDeblocages === 'function') {
+      rafraichirProgressionEtDeblocages();
     }
     if (!(typeof modeSimplifieActif === 'function' && modeSimplifieActif())) afficherXPValidation(result);
   } catch(e) {

@@ -244,12 +244,17 @@ function verifierDeblocages(p) {
 }
 
 // Re-fetch la progression puis vérifie les déblocages — à appeler après
-// toute action qui peut faire gagner de l'XP (séance, journée, bilan)
+// toute action qui peut faire gagner de l'XP (séance, journée, bilan).
+// Rafraîchit aussi en place la carte header de l'accueil (XP/niveau/barre)
+// si elle est affichée, et corrige le cache de préchargement pour qu'un
+// retour ultérieur à l'accueil n'affiche pas un total XP périmé.
 async function rafraichirProgressionEtDeblocages() {
   if (_viewAsClientOverride) return;
   try {
     const p = await api('chargerProgressionClient');
     S.data.prog = p;
+    if (typeof _pf !== 'undefined' && _pf.home) _pf.home.prog = p;
+    if (S.page === 'home' && typeof _majCarteHeader === 'function') _majCarteHeader();
     verifierDeblocages(p);
   } catch(e) {}
 }
