@@ -125,24 +125,24 @@ function renderHistorique() {
         <button onclick="loadSaisieMensurations()" style="flex:1;background:linear-gradient(135deg,#378ADD,#2260a8);color:#fff;border:none;border-radius:10px;padding:12px;font-size:13px;font-weight:600;cursor:pointer;">Saisir mensurations</button>
       </div>
 
-      <div style="display:flex;gap:8px;margin-bottom:8px;">
+      <div style="display:flex;gap:8px;align-items:flex-end;margin-bottom:12px;">
         <div style="flex:1;min-width:0;overflow:hidden;">
           <div style="font-size:10px;color:#8892a4;text-transform:uppercase;margin-bottom:4px;">Depuis</div>
           <input type="date" id="mensDateDebut" value="${_mDateDebut}"
-            style="box-sizing:border-box;display:block;width:0;min-width:100%;padding:8px 2px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:8px;font-size:10px;"
+            style="box-sizing:border-box;display:block;width:0;min-width:100%;padding:12px 4px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:8px;font-size:15px;"
             onchange="onMensFiltre()">
         </div>
         <div style="flex:1;min-width:0;overflow:hidden;">
           <div style="font-size:10px;color:#8892a4;text-transform:uppercase;margin-bottom:4px;">Jusqu'au</div>
           <input type="date" id="mensDateFin" value="${_mDateFin}"
-            style="box-sizing:border-box;display:block;width:0;min-width:100%;padding:8px 2px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:8px;font-size:10px;"
+            style="box-sizing:border-box;display:block;width:0;min-width:100%;padding:12px 4px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:8px;font-size:15px;"
             onchange="onMensFiltre()">
         </div>
+        <button onclick="onMensTout()" id="btnToutePeriode"
+          style="flex:0 0 auto;white-space:nowrap;box-sizing:border-box;background:#2d3142;border:none;border-radius:8px;color:${_mDateDebut ? '#8892a4' : '#378ADD'};padding:12px 12px;font-size:12px;font-weight:600;cursor:pointer;">
+          Toute la période
+        </button>
       </div>
-      <button onclick="onMensTout()" id="btnToutePeriode"
-        style="width:100%;box-sizing:border-box;background:#2d3142;border:none;border-radius:8px;color:${_mDateDebut ? '#8892a4' : '#378ADD'};padding:9px 8px;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:12px;">
-        Toute la période
-      </button>
 
       ${statsHtml}
       <div class="card"><div style="font-size:13px;font-weight:600;margin-bottom:10px;">Historique</div>${histRows}</div>
