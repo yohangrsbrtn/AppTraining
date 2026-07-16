@@ -21,13 +21,6 @@ function formatTsCoach(ts) {
 
 let _mesClients = null;
 let _clientSelectionne = null; // { id, nom, niveau, ... }
-let _clientsExpanded = new Set();
-
-function toggleClientExpand(clientId) {
-  if (_clientsExpanded.has(clientId)) _clientsExpanded.delete(clientId);
-  else _clientsExpanded.add(clientId);
-  setPage('mes-clients');
-}
 
 async function loadMesClients() {
   showLoadingOverlay('Chargement…');
@@ -101,34 +94,24 @@ function renderMesClients() {
       : `<div style="font-size:10px;color:#555e7a;margin-top:3px;">Jamais connecté</div>`;
 
     const lockBtn = c.verrouile
-      ? `<button onclick="event.stopPropagation();deverrouilerClientCoach('${c.id}','${esc(c.nom)}',this)" style="flex:1;height:36px;background:#2d1a0e;border:1.5px solid #c0601a;border-radius:8px;font-size:13px;font-weight:600;color:#f0f2ff;padding:0;cursor:pointer;" title="Déverrouiller l'accès à la feuille">🔒 Déverrouiller</button>`
-      : `<button onclick="event.stopPropagation();verrouilerClientCoach('${c.id}','${esc(c.nom)}',this)" style="flex:1;height:36px;background:#1e2235;border:1px solid #2d3142;border-radius:8px;font-size:13px;font-weight:600;color:#f0f2ff;padding:0;cursor:pointer;" title="Verrouiller l'accès à la feuille">🔒 Verrouiller</button>`;
+      ? `<button onclick="event.stopPropagation();deverrouilerClientCoach('${c.id}','${esc(c.nom)}',this)" style="width:30px;height:30px;background:#2d1a0e;border:1.5px solid #c0601a;border-radius:8px;font-size:14px;padding:0;margin:0;min-width:unset;cursor:pointer;flex-shrink:0;" title="Déverrouiller l'accès à la feuille">🔒</button>`
+      : `<button onclick="event.stopPropagation();verrouilerClientCoach('${c.id}','${esc(c.nom)}',this)" style="width:30px;height:30px;background:#1e2235;border:1px solid #2d3142;border-radius:8px;font-size:14px;padding:0;margin:0;min-width:unset;cursor:pointer;flex-shrink:0;" title="Verrouiller l'accès à la feuille">🔒</button>`;
 
-    const chimieBtn = `<button onclick="event.stopPropagation();toggleChimieClientCoach('${c.id}','${esc(c.nom)}')" style="flex:1;height:36px;background:${c.chimieActif ? '#2a1a3d' : '#1e2235'};border:1px solid ${c.chimieActif ? '#a78bfa' : '#2d3142'};border-radius:8px;font-size:13px;font-weight:600;color:#f0f2ff;padding:0;cursor:pointer;opacity:${c.chimieActif ? '1' : '.7'};" title="${c.chimieActif ? 'Désactiver' : 'Activer'} le protocole">🧬 ${c.chimieActif ? 'Actif' : 'Inactif'}</button>`;
+    const chimieBtn = `<button onclick="event.stopPropagation();toggleChimieClientCoach('${c.id}','${esc(c.nom)}')" style="width:30px;height:30px;background:${c.chimieActif ? '#2a1a3d' : '#1e2235'};border:1px solid ${c.chimieActif ? '#a78bfa' : '#2d3142'};border-radius:8px;font-size:14px;padding:0;margin:0;min-width:unset;cursor:pointer;flex-shrink:0;opacity:${c.chimieActif ? '1' : '.5'};" title="${c.chimieActif ? 'Désactiver' : 'Activer'} le protocole">🧬</button>`;
 
-    const ouvert = _clientsExpanded.has(c.id);
-    const panelHtml = ouvert ? `
-      <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:flex;gap:8px;">
+    return `<div onclick="ouvrirClientDetail('${c.id}')"
+      class="card" style="padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;cursor:pointer;-webkit-tap-highlight-color:transparent;"
+      ontouchstart="this.style.opacity='.75'" ontouchend="this.style.opacity='1'">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:15px;font-weight:700;color:#f0f2ff;white-space:nowrap;">${esc(c.nom)}${titreBadge}</div>
+        ${connex}
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+        <div style="font-size:11px;font-weight:700;color:#8892a4;">Niv.&nbsp;${c.niveau || 1}</div>
+        ${typeof getBadgeSVG === 'function' ? getBadgeSVG(tier, 36, 'cl'+c.id) : ''}
         ${chimieBtn}
         ${lockBtn}
       </div>
-      <button onclick="event.stopPropagation();ouvrirClientDetail('${c.id}')" class="btn-primary" style="width:100%;margin-top:8px;height:38px;">Voir le client ↗</button>
-    ` : '';
-
-    return `<div onclick="toggleClientExpand('${c.id}')"
-      class="card" style="padding:12px 16px;margin-bottom:8px;cursor:pointer;-webkit-tap-highlight-color:transparent;"
-      ontouchstart="this.style.opacity='.75'" ontouchend="this.style.opacity='1'">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:15px;font-weight:700;color:#f0f2ff;white-space:nowrap;">${esc(c.nom)}${titreBadge}</div>
-          ${connex}
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
-          <div style="font-size:11px;font-weight:700;color:#8892a4;">Niv.&nbsp;${c.niveau || 1}</div>
-          ${typeof getBadgeSVG === 'function' ? getBadgeSVG(tier, 36, 'cl'+c.id) : ''}
-        </div>
-      </div>
-      ${panelHtml}
     </div>`;
   });
 
