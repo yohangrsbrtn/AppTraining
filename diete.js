@@ -66,20 +66,44 @@ function renderDieteList() {
   </div>`;
 }
 
+// Totaux par (repas, équivalence) — recalculés à chaque swipe pour mettre à
+// jour les totaux du haut sans re-render complet. _dCurrentOpt[i] = index de
+// l'équivalence actuellement affichée pour le repas i (0 = repas de base).
+let _dOptionTotals = [];
+let _dCurrentOpt   = [];
+
+function _sommeAliments(aliments) {
+  let cals = 0, prot = 0, glu = 0, lip = 0;
+  (aliments || []).forEach(a => {
+    cals += a.cals || 0; prot += a.prot || 0;
+    glu  += a.glu  || 0; lip  += a.lip  || 0;
+  });
+  return { cals, prot, glu, lip };
+}
+
+function _recalcDieteTotal() {
+  let tCals = 0, tProt = 0, tGlu = 0, tLip = 0;
+  _dOptionTotals.forEach((options, i) => {
+    const t = options[_dCurrentOpt[i] || 0] || options[0];
+    if (!t) return;
+    tCals += t.cals; tProt += t.prot; tGlu += t.glu; tLip += t.lip;
+  });
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = Math.round(v); };
+  set('dTotKcal', tCals); set('dTotProt', tProt); set('dTotGlu', tGlu); set('dTotLip', tLip);
+}
+
 function renderDieteDetail() {
   const data = _dDetail;
-  let tCals = 0, tProt = 0, tGlu = 0, tLip = 0;
-  (data.repas || []).forEach(r => {
-    (r.aliments || []).forEach(a => {
-      tCals += a.cals || 0; tProt += a.prot || 0;
-      tGlu  += a.glu  || 0; tLip  += a.lip  || 0;
-    });
-  });
+  _dOptionTotals = [];
+  _dCurrentOpt = [];
 
   let repasHtml = '';
   (data.repas || []).forEach((r, idx) => {
     const options = [r].concat(r.equivalences || []);
     const hasOpts = options.length > 1;
+
+    _dOptionTotals[idx] = options.map(opt => _sommeAliments(opt.aliments));
+    _dCurrentOpt[idx] = 0;
 
     repasHtml += `<div class="card">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px;">
@@ -103,15 +127,21 @@ function renderDieteDetail() {
     repasHtml += `</div>`;
   });
 
+  const t0 = _dOptionTotals.reduce((acc, options) => {
+    const t = options[0];
+    acc.cals += t.cals; acc.prot += t.prot; acc.glu += t.glu; acc.lip += t.lip;
+    return acc;
+  }, { cals: 0, prot: 0, glu: 0, lip: 0 });
+
   return `<div id="app">
     ${renderHeader(esc(_dNom), 'Ma Diète', false)}
     <div class="page">
       <button class="btn-secondary" onclick="loadDiete()" style="margin-bottom:12px;">← Retour</button>
       <div class="card" style="display:flex;justify-content:space-around;text-align:center;padding:14px 8px;">
-        <div><div style="font-size:20px;font-weight:700;">${Math.round(tCals)}</div><div class="macro-label">KCAL</div></div>
-        <div><div style="font-size:20px;font-weight:700;color:#378ADD;">${Math.round(tProt)}</div><div class="macro-label">PROT</div></div>
-        <div><div style="font-size:20px;font-weight:700;color:var(--green);">${Math.round(tGlu)}</div><div class="macro-label">GLU</div></div>
-        <div><div style="font-size:20px;font-weight:700;color:#D85A30;">${Math.round(tLip)}</div><div class="macro-label">LIP</div></div>
+        <div><div style="font-size:20px;font-weight:700;" id="dTotKcal">${Math.round(t0.cals)}</div><div class="macro-label">KCAL</div></div>
+        <div><div style="font-size:20px;font-weight:700;color:#378ADD;" id="dTotProt">${Math.round(t0.prot)}</div><div class="macro-label">PROT</div></div>
+        <div><div style="font-size:20px;font-weight:700;color:var(--green);" id="dTotGlu">${Math.round(t0.glu)}</div><div class="macro-label">GLU</div></div>
+        <div><div style="font-size:20px;font-weight:700;color:#D85A30;" id="dTotLip">${Math.round(t0.lip)}</div><div class="macro-label">LIP</div></div>
       </div>
       ${repasHtml}
     </div>
@@ -147,9 +177,14 @@ function initDieteSliders(count) {
     const dots   = document.getElementById('dDots_'   + i);
     if (!slider || !dots) continue;
     const total = slider.children.length;
+    const repasIdx = i;
     slider.addEventListener('scroll', function() {
       const idx = Math.round(slider.scrollLeft / slider.offsetWidth);
       dots.textContent = (idx + 1) + ' / ' + total;
+      if (_dCurrentOpt[repasIdx] !== idx) {
+        _dCurrentOpt[repasIdx] = idx;
+        _recalcDieteTotal();
+      }
     }, { passive: true });
   }
 }
