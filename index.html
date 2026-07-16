@@ -1233,7 +1233,12 @@ function sauverStepsJournee(val) {
   const errEl = document.getElementById('jStepsErr');
   if (errEl) errEl.style.display = (v !== '' && v > 0 && v < 1000) ? 'block' : 'none';
   _journeeData.steps = v;
-  api('enregistrerValeur', { nomFeuille: 'Bilan', ligne: _journeeData.ligne, colonne: 17, valeur: v }).catch(() => {});
+  // pasTotal (chargerProgressionClient) compte les steps de la semaine en
+  // cours même non validée — un titre "pas cumulés" peut donc se débloquer
+  // dès la saisie, sans attendre "Valider ma journée".
+  api('enregistrerValeur', { nomFeuille: 'Bilan', ligne: _journeeData.ligne, colonne: 17, valeur: v })
+    .then(() => { if (typeof rafraichirProgressionEtDeblocages === 'function') rafraichirProgressionEtDeblocages(); })
+    .catch(() => {});
 }
 
 async function validerJourneeClient() {
