@@ -123,12 +123,54 @@ function statutAnalyse(m) {
   return { label: 'Normal', couleur: 'var(--green)' };
 }
 
+// Catégorisation par mots-clés (et non par nom exact) car le libellé des
+// marqueurs est saisi manuellement par le coach et peut varier légèrement
+// d'un client/d'une extraction à l'autre.
+const CATEGORIES_ANALYSES = [
+  { nom: 'Hémogramme (NFS)', motsCles: ['hemat', 'hemoglob', 'leucocyte', 'polynucle', 'neutrophile', 'eosinophile', 'basophile', 'lymphocyte', 'monocyte', 'plaquette', 'vgm', 'tcmh', 'ccmh', 'idr'] },
+  { nom: 'Bilan hépatique', motsCles: ['transaminase', 'asat', 'alat', 'sgot', 'sgpt', 'gamma gt', 'ggt', 'phosphatase alcaline', 'bilirubine', 'fib4'] },
+  { nom: 'Bilan rénal', motsCles: ['creatinine', 'dfg', 'albuminurie', 'albumine urinaire', 'uree'] },
+  { nom: 'Ionogramme sanguin', motsCles: ['sodium', 'potassium', 'chlore', 'calcium'] },
+  { nom: 'Bilan glucido-lipidique', motsCles: ['glycemie', 'cholesterol', 'triglyceride', 'hba1c'] },
+  { nom: 'Bilan thyroïdien', motsCles: ['tsh', 'thyro'] },
+  { nom: 'Bilan hormonal', motsCles: ['testosterone', 'prolactine', 'psa', 'oestradiol', 'estradiol', ' lh', ' fsh', 'shbg', 'cortisol'] },
+  { nom: 'Inflammation', motsCles: ['crp', 'vitesse de sedimentation'] },
+  { nom: 'Bilan martial', motsCles: ['ferritine', 'fer serique', 'transferrine', 'coefficient de saturation'] },
+  { nom: 'Vitamines', motsCles: ['vitamine'] },
+];
+
+function normaliserTexte(s) {
+  return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+function categoriserMarqueur(nom) {
+  const n = normaliserTexte(nom);
+  for (const cat of CATEGORIES_ANALYSES) {
+    if (cat.motsCles.some(mc => n.includes(normaliserTexte(mc)))) return cat.nom;
+  }
+  return 'Autres';
+}
+
 function renderProtocoleAnalyses(a) {
   if (!a.hasAnalyses) {
     return `<div class="empty"><div class="empty-icon">🩸</div><div class="empty-text">Aucune prise de sang enregistrée pour l'instant.</div></div>`;
   }
 
-  const cards = (a.marqueurs || []).map(m => {
+  const groupes = new Map();
+  (a.marqueurs || []).forEach(m => {
+    const cat = categoriserMarqueur(m.nom);
+    if (!groupes.has(cat)) groupes.set(cat, []);
+    groupes.get(cat).push(m);
+  });
+  const ordreCategories = [...CATEGORIES_ANALYSES.map(c => c.nom), 'Autres'].filter(c => groupes.has(c));
+
+  return ordreCategories.map(cat => `
+    <div class="section-title" style="color:var(--muted);">${esc(cat)}</div>
+    ${groupes.get(cat).map(m => renderCarteMarqueur(m)).join('')}
+  `).join('');
+}
+
+function renderCarteMarqueur(m) {
     const st = statutAnalyse(m);
     const ouvert = _analysesExpanded.has(m.nom);
     const variation = m.historique.length >= 2 ? (m.derniereValeur - m.historique[m.historique.length - 2].valeur) : null;
@@ -159,7 +201,4 @@ function renderProtocoleAnalyses(a) {
       </div>
       ${detailHtml}
     </div>`;
-  }).join('');
-
-  return `<div class="section-title" style="color:var(--muted);">Marqueurs</div>${cards}`;
 }
