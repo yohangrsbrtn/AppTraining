@@ -1,32 +1,68 @@
 // ── Protocole (fonctionnalité activable individuellement par client) ────
 // Lecture seule : le coach saisit le cycle/les molécules directement dans la
-// feuille Google Sheets "Protocol" du client. L'app se contente de relire ces
-// données brutes et de recalculer l'affichage à la volée (mêmes formules que
-// le bouton "Générer le protocole" du coach), sans jamais rien écrire dedans.
+// feuille Google Sheets "Protocol" du client, et les résultats de prise de
+// sang dans la feuille "Analyses" (une ligne = un marqueur à une date donnée).
+// L'app se contente de relire ces données brutes et de recalculer l'affichage
+// à la volée (mêmes formules que le bouton "Générer le protocole" du coach
+// pour le cycle), sans jamais rien écrire dedans.
 
 let _protocoleData = null;
+let _analysesData = null;
+let _protocoleTab = 'cycle';
+let _analysesExpanded = new Set();
 
 async function loadProtocole() {
   showLoadingOverlay('Chargement…');
   try {
-    _protocoleData = await api('chargerProtocoleChimie');
+    const [proto, analyses] = await Promise.all([
+      api('chargerProtocoleChimie'),
+      api('chargerAnalysesSante')
+    ]);
+    _protocoleData = proto;
+    _analysesData = analyses;
     hideLoadingOverlay();
     setPage('protocole');
     schedulerPrechargement();
   } catch(e) { hideLoadingOverlay(); setPage('home'); }
 }
 
+function switchProtocoleTab(tab) {
+  _protocoleTab = tab;
+  setPage('protocole');
+}
+
+function toggleAnalyseMarqueur(nom) {
+  if (_analysesExpanded.has(nom)) _analysesExpanded.delete(nom);
+  else _analysesExpanded.add(nom);
+  setPage('protocole');
+}
+
 function renderProtocolePage() {
   const d = _protocoleData || {};
-  if (!d.hasProtocole) {
-    return `<div id="app">
-      ${renderHeader('Protocole', '', false)}
-      <div class="page">
-        <div class="empty"><div class="empty-icon">🧬</div><div class="empty-text">Aucun protocole en cours pour l'instant.</div></div>
-        <button class="btn-secondary" onclick="loadHome()">← Accueil</button>
-      </div>
-      ${renderNavBar('home')}
+  const a = _analysesData || {};
+
+  const tabsHtml = `
+    <div style="display:flex;gap:8px;margin-bottom:14px;">
+      <button onclick="switchProtocoleTab('cycle')" style="flex:1;background:${_protocoleTab === 'cycle' ? 'linear-gradient(135deg,#378ADD,#2260a8)' : '#2d3142'};color:${_protocoleTab === 'cycle' ? '#fff' : '#e8eaf0'};border:none;border-radius:10px;padding:10px;font-size:13px;font-weight:600;cursor:pointer;">Cycle</button>
+      <button onclick="switchProtocoleTab('analyses')" style="flex:1;background:${_protocoleTab === 'analyses' ? 'linear-gradient(135deg,#378ADD,#2260a8)' : '#2d3142'};color:${_protocoleTab === 'analyses' ? '#fff' : '#e8eaf0'};border:none;border-radius:10px;padding:10px;font-size:13px;font-weight:600;cursor:pointer;">Analyses</button>
     </div>`;
+
+  const body = _protocoleTab === 'analyses' ? renderProtocoleAnalyses(a) : renderProtocoleCycle(d);
+
+  return `<div id="app">
+    ${renderHeader('Protocole', _protocoleTab === 'cycle' && d.dureeSemaines ? d.dureeSemaines + ' semaines' : '', false)}
+    <div class="page">
+      ${tabsHtml}
+      ${body}
+      <button class="btn-secondary" onclick="loadHome()" style="margin-top:8px;">← Accueil</button>
+    </div>
+    ${renderNavBar('home')}
+  </div>`;
+}
+
+function renderProtocoleCycle(d) {
+  if (!d.hasProtocole) {
+    return `<div class="empty"><div class="empty-icon">🧬</div><div class="empty-text">Aucun protocole en cours pour l'instant.</div></div>`;
   }
 
   const catColor = c => c === 'Injectable' ? '#e05c5c' : c === 'Oral' ? '#4f8ef7' : '#a78bfa';
@@ -65,25 +101,65 @@ function renderProtocolePage() {
         </div>`).join('')}
     </div>`).join('');
 
-  return `<div id="app">
-    ${renderHeader('Protocole', d.dureeSemaines ? d.dureeSemaines + ' semaines' : '', false)}
-    <div class="page">
-      <div class="card" style="margin-bottom:14px;">
-        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);">
-          <span>Début : <strong style="color:#e8eaf0;">${esc(d.dateDebut)}</strong></span>
-          <span>${d.dureeSemaines} semaines</span>
-        </div>
-        ${d.objectif ? `<div style="font-size:12px;color:var(--muted);margin-top:8px;">${esc(d.objectif)}</div>` : ''}
+  return `
+    <div class="card" style="margin-bottom:14px;">
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);">
+        <span>Début : <strong style="color:#e8eaf0;">${esc(d.dateDebut)}</strong></span>
+        <span>${d.dureeSemaines} semaines</span>
       </div>
-
-      <div class="section-title" style="color:var(--muted);">Molécules</div>
-      ${moleculesHtml || '<div class="empty"><div class="empty-text">Aucune molécule renseignée.</div></div>'}
-
-      <div class="section-title" style="color:var(--muted);margin-top:16px;">Planning</div>
-      ${semainesHtml}
-
-      <button class="btn-secondary" onclick="loadHome()" style="margin-top:8px;">← Accueil</button>
+      ${d.objectif ? `<div style="font-size:12px;color:var(--muted);margin-top:8px;">${esc(d.objectif)}</div>` : ''}
     </div>
-    ${renderNavBar('home')}
-  </div>`;
+
+    <div class="section-title" style="color:var(--muted);">Molécules</div>
+    ${moleculesHtml || '<div class="empty"><div class="empty-text">Aucune molécule renseignée.</div></div>'}
+
+    <div class="section-title" style="color:var(--muted);margin-top:16px;">Planning</div>
+    ${semainesHtml}`;
+}
+
+function statutAnalyse(m) {
+  if (m.statut === 'bas') return { label: 'Bas', couleur: '#378ADD' };
+  if (m.statut === 'haut') return { label: 'Haut', couleur: '#D85A30' };
+  return { label: 'Normal', couleur: 'var(--green)' };
+}
+
+function renderProtocoleAnalyses(a) {
+  if (!a.hasAnalyses) {
+    return `<div class="empty"><div class="empty-icon">🩸</div><div class="empty-text">Aucune prise de sang enregistrée pour l'instant.</div></div>`;
+  }
+
+  const cards = (a.marqueurs || []).map(m => {
+    const st = statutAnalyse(m);
+    const ouvert = _analysesExpanded.has(m.nom);
+    const variation = m.historique.length >= 2 ? (m.derniereValeur - m.historique[m.historique.length - 2].valeur) : null;
+
+    const detailHtml = ouvert ? `
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
+        ${m.historique.length >= 2 ? miniGraphe(m.historique.map(h => h.valeur), st.couleur, ' ' + m.unite) : ''}
+        <div style="margin-top:8px;">
+          ${m.historique.slice().reverse().map(h => `
+            <div style="display:flex;justify-content:space-between;padding:5px 0;font-size:12px;border-bottom:1px solid var(--border);">
+              <span style="color:var(--muted);">${esc(h.date)}</span>
+              <span style="color:#e8eaf0;font-weight:600;">${h.valeur} ${esc(m.unite)}</span>
+            </div>`).join('')}
+        </div>
+      </div>` : '';
+
+    return `
+    <div class="card" onclick="toggleAnalyseMarqueur('${esc(m.nom).replace(/'/g, "\\'")}')" style="cursor:pointer;border-left:3px solid ${st.couleur};padding-left:14px;margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <div style="font-size:14px;font-weight:700;color:#e8eaf0;">${esc(m.nom)}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px;">${esc(m.derniereDate)}${(m.refMin !== null && m.refMax !== null) ? ` · réf. ${m.refMin}–${m.refMax} ${esc(m.unite)}` : ''}</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:16px;font-weight:700;color:${st.couleur};">${m.derniereValeur}&nbsp;<span style="font-size:11px;font-weight:600;color:var(--muted);">${esc(m.unite)}</span></div>
+          <div style="font-size:11px;color:${st.couleur};margin-top:2px;">${st.label}${variation !== null ? ` · ${variation >= 0 ? '+' : ''}${Math.round(variation * 100) / 100}` : ''}</div>
+        </div>
+      </div>
+      ${detailHtml}
+    </div>`;
+  }).join('');
+
+  return `<div class="section-title" style="color:var(--muted);">Marqueurs</div>${cards}`;
 }
