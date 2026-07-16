@@ -168,7 +168,7 @@ function renderProgressionPage() {
           <div style="flex-shrink:0;">${getBadgeSVG(tier, sz, 'prog')}</div>
           <div style="flex:1;min-width:0;">
             <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-              <span style="font-size:18px;font-weight:700;color:#f0f2ff;">${p.prenom || S.client}</span>
+              <span style="font-size:18px;font-weight:700;color:#f0f2ff;">${(p.nom || S.client).split(' ')[0]}</span>
               ${titreHtml}
             </div>
             <div style="font-size:12px;color:#8892a4;margin-top:2px;">${xpTotal ? xpTotal.toLocaleString('fr') + ' XP' : '—'}</div>
