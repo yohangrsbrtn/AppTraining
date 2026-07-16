@@ -269,7 +269,7 @@ async function loadNotificationsCoach() {
 
 function renderNotificationsCoach() {
   const result = _notifData || { logs: [] };
-  const allLogs = (result.logs || []).filter(l => l.type !== 'bilanEnvoye');
+  const allLogs = result.logs || [];
   const filtre = _notifFiltre;
   const liste = filtre ? allLogs.filter(l => l.client === filtre) : allLogs;
 
@@ -303,6 +303,18 @@ function renderNotificationsCoach() {
         ligne3 = l.semaine ? 'Semaine ' + l.semaine : '';
       } else if (l.type === 'journee') {
         ligne2 = '✅ Journée validée';
+        ligne3 = l.semaine || '';
+      } else if (l.type === 'bilanEnvoye') {
+        ligne2 = '📤 Bilan envoyé au coach';
+        ligne3 = l.semaine ? 'Semaine ' + l.semaine : '';
+      } else if (l.type === 'bonus_ponctualite') {
+        ligne2 = '🎯 Bonus de ponctualité du bilan';
+        ligne3 = l.semaine ? 'Semaine ' + l.semaine : '';
+      } else if (l.type === 'bonus_streak') {
+        ligne2 = '🔥 Bonus série de bilans';
+        ligne3 = l.semaine ? 'Semaine ' + l.semaine : '';
+      } else if (l.type === 'bonus_pas') {
+        ligne2 = '🦶 Objectif pas atteint';
         ligne3 = l.semaine || '';
       } else {
         ligne2 = '✅ ' + (l.semaine ? 'S' + l.semaine : '') + (nomSeance ? ' · ' + nomSeance : ' · Séance validée');
