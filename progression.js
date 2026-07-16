@@ -176,7 +176,7 @@ function renderProgressionPage() {
             </div>
           </div>
         </div>
-        <button onclick="ouvrirSettings()" style="width:36px;height:36px;background:transparent;border:1px solid #2a2f45;border-radius:9px;padding:0;font-size:17px;margin:0;line-height:36px;color:#555e7a;text-align:center;flex-shrink:0;align-self:flex-start;cursor:pointer;">⚙️</button>
+        <button onclick="ouvrirSettings()" style="width:36px;height:36px;background:transparent;border:1px solid #2a2f45;border-radius:9px;padding:0;margin:0;display:flex;align-items:center;justify-content:center;flex-shrink:0;align-self:flex-start;cursor:pointer;">${ICONE_PARAMETRES}</button>
       </div>
     </div>
 
