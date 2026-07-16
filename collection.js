@@ -34,6 +34,30 @@ function niveauToTier(n) {
   return n>=60?'legendaire':n>=50?'diamant':n>=40?'platine':n>=30?'or':n>=20?'argent':n>=10?'bronze':'debutant';
 }
 
+// Pill du titre actif (médaillon + halo + reflets) — un seul point de vérité
+// réutilisé sur la carte profil (accueil, profil), Progression et le bandeau
+// de Collection, pour que tout changement de style se propage partout.
+// large=true : bandeau Collection (plus grand). large=false : badge inline
+// à côté du prénom (accueil/profil/progression).
+function renderTitrePill(titreDef, large) {
+  const c1 = titreDef.c1, c2 = titreDef.c2, icon = titreDef.icon, nom = esc(titreDef.nom);
+  if (large) {
+    return `<span style="position:relative;display:inline-flex;align-items:center;justify-content:center;gap:10px;overflow:hidden;min-width:220px;background:linear-gradient(100deg,${c1}30 0%,${c2}dd 70%);border:1px solid ${c1}55;border-radius:14px;padding:8px 20px;">
+      <span style="position:absolute;top:-13px;right:10px;width:26px;height:26px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#ffffffcc,${c1}44 55%,transparent 78%);border:1px solid ${c1}55;"></span>
+      <span style="position:absolute;bottom:-7px;right:44px;width:14px;height:14px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#ffffffb8,${c1}44 55%,transparent 78%);border:1px solid ${c1}50;"></span>
+      <span style="position:absolute;top:10px;right:-5px;width:10px;height:10px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#ffffffb0,${c1}44 55%,transparent 78%);border:1px solid ${c1}50;"></span>
+      <span style="position:relative;width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,${c1}cc,${c2});display:flex;align-items:center;justify-content:center;box-shadow:0 0 10px ${c1}66;flex-shrink:0;"><span style="font-size:16px;">${icon}</span></span>
+      <span style="position:relative;font-size:16px;font-weight:700;color:#f0f2ff;text-shadow:0 0 8px ${c1}44;white-space:nowrap;">${nom}</span>
+    </span>`;
+  }
+  return `<span style="position:relative;display:inline-flex;align-items:center;justify-content:center;gap:5px;overflow:hidden;min-width:130px;background:linear-gradient(100deg,${c1}30 0%,${c2}dd 70%);border:1px solid ${c1}55;border-radius:9px;padding:4px 11px;margin-left:6px;">
+    <span style="position:absolute;top:-8px;right:6px;width:16px;height:16px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#ffffffcc,${c1}44 55%,transparent 78%);border:1px solid ${c1}55;"></span>
+    <span style="position:absolute;bottom:-5px;right:26px;width:9px;height:9px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#ffffffb8,${c1}44 55%,transparent 78%);border:1px solid ${c1}50;"></span>
+    <span style="position:relative;width:16px;height:16px;border-radius:50%;background:linear-gradient(135deg,${c1}cc,${c2});display:flex;align-items:center;justify-content:center;box-shadow:0 0 6px ${c1}66;flex-shrink:0;"><span style="font-size:9px;">${icon}</span></span>
+    <span style="position:relative;font-size:10px;font-weight:700;color:#f0f2ff;white-space:nowrap;">${nom}</span>
+  </span>`;
+}
+
 const TITRES_DEF = [
   {id:'baby',      nom:'Baby-trotteur',    icon:'👶', c1:'#00E090', c2:'#006A48', cat:'pas',    seuil:150000,  cond:'150 000 pas cumulés'},
   {id:'march',     nom:'Marcheur',         icon:'🚶', c1:'#40C8FF', c2:'#0058A0', cat:'pas',    seuil:300000,  cond:'300 000 pas cumulés'},
@@ -133,9 +157,9 @@ function renderCollectionPage() {
 
   const actiDef = _colTitreActif ? TITRES_DEF.find(t => t.id === _colTitreActif) : null;
   const activeBanner = actiDef ? `
-    <div class="card" style="text-align:center;padding:14px 12px;border-color:${actiDef.c1}60;margin-bottom:16px;">
-      <div style="font-size:11px;color:var(--muted);margin-bottom:4px;">TITRE ACTIF</div>
-      <div style="font-size:20px;font-weight:700;color:${actiDef.c1};">${actiDef.icon} ${actiDef.nom}</div>
+    <div class="card" style="text-align:center;padding:18px 12px;margin-bottom:16px;">
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px;letter-spacing:1px;">TITRE ACTIF</div>
+      <div style="display:flex;justify-content:center;">${renderTitrePill(actiDef, true)}</div>
     </div>` : '';
 
   // ── Titres : dégradé sur l'icône, halo, léger lavis diagonal et bulles
@@ -199,6 +223,7 @@ function renderCollectionPage() {
   return `<div id="app">
     ${renderHeader('Ma Collection', '', false)}
     <div class="page">
+      <button class="btn-secondary" onclick="loadProgression()" style="margin-bottom:14px;">← Progression</button>
       ${activeBanner}
       ${badgesHtml}
       ${html}

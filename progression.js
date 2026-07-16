@@ -67,12 +67,7 @@ function renderProgressionPage() {
 
   const titreId = p.titreActif || ((() => { try { return localStorage.getItem('titreActif_' + S.client) || null; } catch(e) { return null; } })());
   const titreDef = titreId && typeof TITRES_DEF !== 'undefined' ? TITRES_DEF.find(t => t.id === titreId) : null;
-  const titreHtml = titreDef ? `<span style="position:relative;display:inline-flex;align-items:center;gap:4px;overflow:hidden;background:linear-gradient(100deg,${titreDef.c1}35 0%,${titreDef.c2}cc 65%);border:1px solid ${titreDef.c1}55;border-radius:20px;padding:3px 9px 3px 3px;margin-left:2px;">
-    <span style="position:absolute;top:-5px;right:8px;width:11px;height:11px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#ffffffcc,${titreDef.c1}33 55%,transparent 78%);"></span>
-    <span style="position:absolute;bottom:-4px;right:20px;width:7px;height:7px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#ffffffb0,${titreDef.c1}33 55%,transparent 78%);"></span>
-    <span style="position:relative;width:16px;height:16px;border-radius:50%;background:linear-gradient(135deg,${titreDef.c1}cc,${titreDef.c2});display:flex;align-items:center;justify-content:center;box-shadow:0 0 6px ${titreDef.c1}66;flex-shrink:0;"><span style="font-size:9px;line-height:1;">${titreDef.icon}</span></span>
-    <span style="position:relative;font-size:10px;font-weight:700;color:#f0f2ff;text-shadow:0 0 6px ${titreDef.c1}44;white-space:nowrap;">${titreDef.nom}</span>
-  </span>` : '';
+  const titreHtml = titreDef ? renderTitrePill(titreDef, false) : '';
 
   // ── Pas cumulés : progression vers le prochain palier (150k/300k/600k/1M)
   const ptRaw = Math.round(p.pasTotal || 0);

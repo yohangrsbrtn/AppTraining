@@ -64,13 +64,8 @@ function renderProtocolePage() {
 // catégories d'analyses) — identité visuelle propre à Protocole, écho du
 // motif ADN (losange en dégradé mauve→rose avec halo).
 function sectionTitreProtocole(label) {
-  const gid = 'secTitreGrad_' + label.replace(/[^a-zA-Z0-9]/g, '');
-  return `<div style="display:flex;align-items:center;gap:8px;margin:20px 0 8px;">
-    <svg width="12" height="12" viewBox="0 0 12 12" style="filter:drop-shadow(0 0 3px #a78bfa99);flex-shrink:0;">
-      <defs><linearGradient id="${gid}" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#c4a2ff"/><stop offset="100%" stop-color="#e879f9"/></linearGradient></defs>
-      <rect x="0.5" y="0.5" width="11" height="11" rx="2.5" fill="url(#${gid})" transform="rotate(45 6 6)"/>
-    </svg>
-    <span style="font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#b768ff;text-shadow:0 0 10px #a78bfa66, 0 0 18px #e879f933;">${esc(label)}</span>
+  return `<div style="margin:20px 0 8px;">
+    <span style="font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#ad72e8;text-shadow:0 0 6px #a78bfa4d, 0 0 10px #e879f91f;">${esc(label)}</span>
   </div>`;
 }
 
