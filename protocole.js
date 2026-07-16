@@ -39,8 +39,9 @@ function renderProtocolePage() {
           <div style="font-size:11px;color:var(--muted);margin-top:2px;">${esc(m.categorie)}</div>
         </div>
         <div style="text-align:right;">
-          <div style="font-size:13px;font-weight:700;color:${catColor(m.categorie)};">${esc(m.totalConverti || (m.totalMg + ' mg'))}</div>
-          ${m.quantiteRequise ? `<div style="font-size:11px;color:var(--muted);margin-top:2px;">${esc(m.quantiteRequise)}</div>` : ''}
+          <div style="font-size:15px;font-weight:700;color:${catColor(m.categorie)};">${m.dosageHebdoMg}&nbsp;mg<span style="font-size:10px;font-weight:600;color:var(--muted);">/sem</span></div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px;">${esc(m.totalConverti || (m.totalMg + ' mg'))} sur le cycle</div>
+          ${m.quantiteRequise ? `<div style="font-size:11px;color:var(--muted);margin-top:1px;">${esc(m.quantiteRequise)}</div>` : ''}
         </div>
       </div>
     </div>`).join('');
