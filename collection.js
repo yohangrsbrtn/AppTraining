@@ -246,7 +246,7 @@ function verifierDeblocages(p) {
 // Re-fetch la progression puis vérifie les déblocages — à appeler après
 // toute action qui peut faire gagner de l'XP (séance, journée, bilan)
 async function rafraichirProgressionEtDeblocages() {
-  if (S.isCoach || _viewAsClientOverride) return;
+  if (_viewAsClientOverride) return;
   try {
     const p = await api('chargerProgressionClient');
     S.data.prog = p;

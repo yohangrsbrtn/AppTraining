@@ -547,8 +547,10 @@ async function loadHome() {
 }
 
 function _apresChargementHome() {
-  // Détection déblocages niveau/titres (clients seulement, pas le coach en vue client)
-  if (!S.isCoach && !_viewAsClientOverride) {
+  // Détection déblocages niveau/titres — le coach voit ses propres passages
+  // de niveau/titres comme n'importe quel client (comme en GAS), seule la
+  // vue client (coach qui consulte le profil d'un autre) est exclue.
+  if (!_viewAsClientOverride) {
     setTimeout(() => verifierDeblocages(S.data.prog), 300);
   }
   // fire-and-forget classement — lit un spreadsheet séparé (LOG_SHEET_ID), safe en concurrent
