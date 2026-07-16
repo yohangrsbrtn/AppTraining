@@ -135,14 +135,16 @@ function renderDieteDetail() {
 
   return `<div id="app">
     ${renderHeader(esc(_dNom), 'Ma Diète', false)}
-    <div class="page">
-      <button class="btn-secondary" onclick="loadDiete()" style="margin-bottom:12px;">← Retour</button>
-      <div class="card" style="display:flex;justify-content:space-around;text-align:center;padding:14px 8px;">
+    <div id="dStickyMacros" style="position:sticky;top:0;z-index:90;background:var(--bg);padding:10px 16px;box-shadow:0 8px 12px -6px rgba(0,0,0,.4);">
+      <div class="card" style="display:flex;justify-content:space-around;text-align:center;padding:14px 8px;margin-bottom:0;">
         <div><div style="font-size:20px;font-weight:700;" id="dTotKcal">${Math.round(t0.cals)}</div><div class="macro-label">KCAL</div></div>
         <div><div style="font-size:20px;font-weight:700;color:#378ADD;" id="dTotProt">${Math.round(t0.prot)}</div><div class="macro-label">PROT</div></div>
         <div><div style="font-size:20px;font-weight:700;color:var(--green);" id="dTotGlu">${Math.round(t0.glu)}</div><div class="macro-label">GLU</div></div>
         <div><div style="font-size:20px;font-weight:700;color:#D85A30;" id="dTotLip">${Math.round(t0.lip)}</div><div class="macro-label">LIP</div></div>
       </div>
+    </div>
+    <div class="page">
+      <button class="btn-secondary" onclick="loadDiete()" style="margin-bottom:12px;">← Retour</button>
       ${repasHtml}
     </div>
     ${renderNavBar('diete')}
@@ -169,6 +171,15 @@ function rendreCorpsRepas(r) {
       <div><span style="font-size:14px;font-weight:600;color:var(--green);">${Math.round(sGlu)}</span><div class="macro-label">GLU</div></div>
       <div><span style="font-size:14px;font-weight:600;color:#D85A30;">${Math.round(sLip)}</span><div class="macro-label">LIP</div></div>
     </div>`;
+}
+
+// Cale le bandeau de totaux (sticky) juste sous le header (sticky lui aussi,
+// hauteur variable selon appareil/notch) pour qu'ils ne se chevauchent pas.
+function initDieteStickyMacros() {
+  const bar = document.getElementById('dStickyMacros');
+  const header = document.querySelector('.header');
+  if (!bar || !header) return;
+  bar.style.top = header.offsetHeight + 'px';
 }
 
 function initDieteSliders(count) {

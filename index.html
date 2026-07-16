@@ -240,7 +240,10 @@ function render() {
     case 'bilan-loading': document.body.innerHTML = renderBilanPage(); break;
     case 'diete':
     case 'diete-loading': document.body.innerHTML = renderDietePage();
-      if (_dSubPage === 'detail') initDieteSliders((_dDetail && _dDetail.repas || []).length);
+      if (_dSubPage === 'detail') {
+        initDieteSliders((_dDetail && _dDetail.repas || []).length);
+        initDieteStickyMacros();
+      }
       break;
     case 'mensurations':
     case 'mens-loading':  document.body.innerHTML = renderMensurationsPage(); break;
