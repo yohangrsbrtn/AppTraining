@@ -295,7 +295,23 @@ function hideLoadingOverlay() {
 }
 
 // ── Login ─────────────────────────────────────────────────────────────
+// Flux en 2 temps : on demande d'abord l'identifiant (verifierClient), puis
+// TOUJOURS l'écran mot de passe classique — jamais de pré-aiguillage sur
+// clientAMotDePasse avant la saisie, pour ne jamais court-circuiter l'accès
+// coach (code maître comparé en premier côté serveur, indépendamment de tout
+// mot de passe stocké). C'est seulement si le login échoue ET que le serveur
+// confirme qu'aucun mot de passe n'existe encore pour ce client (erreur
+// 'sans_mot_de_passe') qu'on bascule sur l'écran de création.
+let _loginStep   = 'identifiant'; // 'identifiant' | 'password' | 'create'
+let _loginClient = '';
+
 function renderLogin() {
+  if (_loginStep === 'password') return renderLoginPassword();
+  if (_loginStep === 'create')   return renderLoginCreate();
+  return renderLoginIdentifiant();
+}
+
+function renderLoginIdentifiant() {
   return `
   <div class="login-page">
     <img class="login-logo" src="icons/icon-192.png" alt="">
@@ -303,48 +319,136 @@ function renderLogin() {
     <div class="login-sub">Connecte-toi pour accéder à ton suivi</div>
     <div class="login-form">
       <input id="l-client" type="text" placeholder="Ton prénom" autocomplete="username" autocapitalize="none">
-      <input id="l-mdp"    type="password" placeholder="Mot de passe" autocomplete="current-password">
+      <button class="btn-primary" id="l-btn">Continuer →</button>
+      <div class="login-error" id="l-err"></div>
+    </div>
+  </div>`;
+}
+
+function renderLoginPassword() {
+  return `
+  <div class="login-page">
+    <img class="login-logo" src="icons/icon-192.png" alt="">
+    <div class="login-title">Bonjour !</div>
+    <div class="login-sub">Entre ton mot de passe pour accéder à ton espace</div>
+    <div class="login-form">
+      <input id="l-mdp" type="password" placeholder="Mot de passe" autocomplete="current-password">
       <button class="btn-primary" id="l-btn">Se connecter</button>
       <div class="login-error" id="l-err"></div>
     </div>
   </div>`;
 }
 
-function bindLogin() {
-  document.getElementById('l-btn').addEventListener('click', doLogin);
-  document.getElementById('l-mdp').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+function renderLoginCreate() {
+  return `
+  <div class="login-page">
+    <img class="login-logo" src="icons/icon-192.png" alt="">
+    <div class="login-title">🔐 Crée ton mot de passe</div>
+    <div class="login-sub">Pour sécuriser ton espace coaching</div>
+    <div class="login-form">
+      <input id="l-mdp1" type="password" placeholder="Minimum 4 caractères" autocomplete="new-password">
+      <input id="l-mdp2" type="password" placeholder="Répète ton mot de passe" autocomplete="new-password">
+      <button class="btn-primary" id="l-btn">Créer mon mot de passe →</button>
+      <div class="login-error" id="l-err"></div>
+    </div>
+  </div>`;
 }
 
-async function doLogin() {
+function bindLogin() {
+  const btn = document.getElementById('l-btn');
+  if (_loginStep === 'identifiant') {
+    btn.addEventListener('click', doVerifierClient);
+    document.getElementById('l-client').addEventListener('keydown', e => { if (e.key === 'Enter') doVerifierClient(); });
+  } else if (_loginStep === 'password') {
+    btn.addEventListener('click', doLogin);
+    document.getElementById('l-mdp').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+  } else if (_loginStep === 'create') {
+    btn.addEventListener('click', doCreerMotDePasse);
+    document.getElementById('l-mdp2').addEventListener('keydown', e => { if (e.key === 'Enter') doCreerMotDePasse(); });
+  }
+}
+
+async function doVerifierClient() {
   const client = document.getElementById('l-client').value.trim().toLowerCase();
-  const mdp    = document.getElementById('l-mdp').value;
-  const btn    = document.getElementById('l-btn');
-  const err    = document.getElementById('l-err');
-  if (!client || !mdp) { err.textContent = 'Remplis tous les champs.'; return; }
+  const btn = document.getElementById('l-btn');
+  const err = document.getElementById('l-err');
+  if (!client) { err.textContent = 'Entre ton prénom.'; return; }
   btn.disabled = true; btn.textContent = '…';
   err.textContent = '';
   try {
-    const GAS = 'https://script.google.com/macros/s/AKfycbwQiM6ixf-CTIWwcuNHoosFbvrDzWmC056yRUGhTaWv0Nwxbm0dLeK3d5QVgqmS7P9G7A/exec';
-    const res  = await fetch(GAS, {
+    const res  = await fetch(GAS_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ action: 'verifierClient', client }) });
+    const json = await res.json();
+    if (!json.ok || !json.existe) throw new Error('Identifiant inconnu.');
+    _loginClient = client;
+    _loginStep = 'password';
+    setPage('login');
+  } catch(e) {
+    err.textContent = e.message || 'Erreur de connexion.';
+    btn.disabled = false; btn.textContent = 'Continuer →';
+  }
+}
+
+async function doLogin() {
+  const mdp = document.getElementById('l-mdp').value;
+  const btn = document.getElementById('l-btn');
+  const err = document.getElementById('l-err');
+  if (!mdp) { err.textContent = 'Entre ton mot de passe.'; return; }
+  btn.disabled = true; btn.textContent = '…';
+  err.textContent = '';
+  try {
+    const res  = await fetch(GAS_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ action: 'login', client, mdp })
+      body: JSON.stringify({ action: 'login', client: _loginClient, mdp })
     });
     const json = await res.json();
-    if (!json.ok) throw new Error(json.error || 'Identifiants incorrects');
-    localStorage.setItem('at_client', json.client);
-    localStorage.setItem('at_token',  json.token);
-    const isCoach = !!(json.coachMode || json.client === 'yohan');
-    localStorage.setItem('at_coach',  isCoach ? '1' : '0');
-    S.client  = json.client;
-    S.token   = json.token;
-    S.isCoach = isCoach;
-    _resetPrechargement();
-    await loadHome();
+    if (!json.ok) {
+      if (json.error === 'sans_mot_de_passe') { _loginStep = 'create'; setPage('login'); return; }
+      throw new Error(json.error || 'Identifiants incorrects');
+    }
+    await _completerConnexion(json);
   } catch(e) {
     err.textContent = e.message === 'token_invalide' ? 'Identifiants incorrects.' : (e.message || 'Erreur de connexion.');
     btn.disabled = false; btn.textContent = 'Se connecter';
   }
+}
+
+async function doCreerMotDePasse() {
+  const mdp1 = document.getElementById('l-mdp1').value;
+  const mdp2 = document.getElementById('l-mdp2').value;
+  const btn  = document.getElementById('l-btn');
+  const err  = document.getElementById('l-err');
+  err.textContent = '';
+  if (mdp1.length < 4) { err.textContent = 'Minimum 4 caractères.'; return; }
+  if (mdp1 !== mdp2) { err.textContent = 'Les mots de passe ne correspondent pas.'; return; }
+  btn.disabled = true; btn.textContent = '…';
+  try {
+    const res  = await fetch(GAS_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'creerMotDePasse', client: _loginClient, mdp: mdp1 })
+    });
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error === 'mdp_trop_court' ? 'Minimum 4 caractères.' : 'Erreur lors de la création.');
+    await _completerConnexion(json);
+  } catch(e) {
+    err.textContent = e.message || 'Erreur serveur.';
+    btn.disabled = false; btn.textContent = 'Créer mon mot de passe →';
+  }
+}
+
+async function _completerConnexion(json) {
+  localStorage.setItem('at_client', json.client);
+  localStorage.setItem('at_token',  json.token);
+  const isCoach = !!(json.coachMode || json.client === 'yohan');
+  localStorage.setItem('at_coach',  isCoach ? '1' : '0');
+  S.client  = json.client;
+  S.token   = json.token;
+  S.isCoach = isCoach;
+  _loginStep = 'identifiant';
+  _loginClient = '';
+  _resetPrechargement();
+  await loadHome();
 }
 
 // ── Home ──────────────────────────────────────────────────────────────
@@ -437,6 +541,7 @@ async function loadHome() {
   } catch(e) {
     hideLoadingOverlay();
     localStorage.removeItem('at_token');
+    _loginStep = 'identifiant'; _loginClient = '';
     setPage('login');
   }
 }
@@ -1163,6 +1268,7 @@ function deconnexion() {
   localStorage.removeItem('at_client');
   localStorage.removeItem('at_coach');
   S.client = ''; S.token = ''; S.isCoach = false; S.data = {};
+  _loginStep = 'identifiant'; _loginClient = '';
   _resetPrechargement();
   setPage('login');
 }
