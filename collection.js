@@ -154,26 +154,26 @@ function renderCollectionPage() {
       const bulles = unlocked ? `<svg style="position:absolute;right:0;top:0;bottom:0;width:110px;pointer-events:none;" viewBox="0 0 110 76" preserveAspectRatio="xMidYMid slice">
         <defs>
           <radialGradient id="bub_${t.id}a" cx="35%" cy="28%" r="65%">
-            <stop offset="0%" stop-color="#ffffff" stop-opacity="0.5"/>
-            <stop offset="55%" stop-color="${t.c1}" stop-opacity="0.15"/>
-            <stop offset="100%" stop-color="${t.c1}" stop-opacity="0.02"/>
+            <stop offset="0%" stop-color="#ffffff" stop-opacity="0.28"/>
+            <stop offset="55%" stop-color="${t.c1}" stop-opacity="0.08"/>
+            <stop offset="100%" stop-color="${t.c1}" stop-opacity="0.01"/>
           </radialGradient>
           <radialGradient id="bub_${t.id}b" cx="35%" cy="28%" r="65%">
-            <stop offset="0%" stop-color="#ffffff" stop-opacity="0.45"/>
-            <stop offset="55%" stop-color="${t.c1}" stop-opacity="0.13"/>
-            <stop offset="100%" stop-color="${t.c1}" stop-opacity="0.02"/>
+            <stop offset="0%" stop-color="#ffffff" stop-opacity="0.25"/>
+            <stop offset="55%" stop-color="${t.c1}" stop-opacity="0.07"/>
+            <stop offset="100%" stop-color="${t.c1}" stop-opacity="0.01"/>
           </radialGradient>
         </defs>
-        <circle cx="28" cy="46" r="26" fill="url(#bub_${t.id}a)" stroke="${t.c1}" stroke-width="0.5" stroke-opacity="0.35"/>
-        <circle cx="72" cy="18" r="15" fill="url(#bub_${t.id}b)" stroke="${t.c1}" stroke-width="0.4" stroke-opacity="0.35"/>
-        <circle cx="88" cy="55" r="19" fill="url(#bub_${t.id}a)" stroke="${t.c1}" stroke-width="0.4" stroke-opacity="0.35"/>
-        <ellipse cx="20" cy="36" rx="6" ry="4" fill="#ffffff" opacity="0.4" transform="rotate(-25 20 36)"/>
-        <ellipse cx="68" cy="12" rx="3.5" ry="2.3" fill="#ffffff" opacity="0.45" transform="rotate(-25 68 12)"/>
-        <ellipse cx="82" cy="46" rx="4.5" ry="3" fill="#ffffff" opacity="0.4" transform="rotate(-25 82 46)"/>
+        <circle cx="28" cy="46" r="26" fill="url(#bub_${t.id}a)" stroke="${t.c1}" stroke-width="0.5" stroke-opacity="0.20"/>
+        <circle cx="72" cy="18" r="15" fill="url(#bub_${t.id}b)" stroke="${t.c1}" stroke-width="0.4" stroke-opacity="0.20"/>
+        <circle cx="88" cy="55" r="19" fill="url(#bub_${t.id}a)" stroke="${t.c1}" stroke-width="0.4" stroke-opacity="0.20"/>
+        <ellipse cx="20" cy="36" rx="6" ry="4" fill="#ffffff" opacity="0.22" transform="rotate(-25 20 36)"/>
+        <ellipse cx="68" cy="12" rx="3.5" ry="2.3" fill="#ffffff" opacity="0.25" transform="rotate(-25 68 12)"/>
+        <ellipse cx="82" cy="46" rx="4.5" ry="3" fill="#ffffff" opacity="0.22" transform="rotate(-25 82 46)"/>
       </svg>` : '';
       const indicateur = isActif
         ? `<span style="font-size:10px;font-weight:700;color:#3ecf8e;background:#0d3a28;border:1px solid #1a5a38;padding:4px 9px;border-radius:6px;">● ACTIF</span>`
-        : unlocked ? `<span style="font-size:18px;color:#4f5a78;">›</span>` : `<span style="font-size:16px;">🔒</span>`;
+        : unlocked ? `<span style="font-size:10px;font-weight:700;color:#a78bfa;background:#221a3d;border:1px solid #4a3a7a;padding:4px 10px;border-radius:6px;">○ Activer</span>` : `<span style="font-size:16px;">🔒</span>`;
       html += `<div onclick="${unlocked ? `activerTitre('${t.id}')` : ''}"
         style="background:${unlocked ? 'linear-gradient(150deg,#161b2e 0%,#1b2138 55%,#14182a 100%)' : '#161b2e'};border-radius:14px;border:1px solid ${borderColor};border-top:2px solid ${borderTopColor};
           padding:14px 16px;position:relative;overflow:hidden;cursor:${unlocked?'pointer':'default'};
