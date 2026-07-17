@@ -116,9 +116,9 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 /* ── Bilan ── */
 .section-title { font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:20px 0 8px; }
 .field-label { font-size:11px;color:var(--muted);margin-bottom:3px;font-weight:600;letter-spacing:.5px; }
-.bilan-input { width:100%;padding:8px;background:#0f1117;color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px;font-family:inherit; }
+.bilan-input { width:100%;padding:8px;background:#0f1117;color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:16px;font-family:inherit; }
 .bilan-input[readonly] { opacity:.6; }
-.bilan-textarea { width:100%;padding:10px;background:#0f1117;color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px;font-family:inherit;resize:vertical;min-height:70px; }
+.bilan-textarea { width:100%;padding:10px;background:#0f1117;color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:16px;font-family:inherit;resize:vertical;min-height:70px; }
 .bilan-textarea[readonly] { opacity:.6; }
 .bilan-banner { font-size:12px;color:var(--muted);text-align:center;margin-bottom:12px;padding:8px 12px;background:#1e2235;border-radius:8px; }
 .btn-secondary { width:100%;background:#2d3142;color:var(--text);border:none;border-radius:var(--radius);font-size:14px;font-weight:600;padding:12px;cursor:pointer;margin-bottom:4px; }
@@ -127,10 +127,10 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font-famil
 .btn-disabled { background:#2d3142;color:var(--text);border:none;border-radius:var(--radius);font-size:14px;font-weight:600;padding:14px;opacity:.55;cursor:not-allowed; }
 
 /* ── Training ── */
-.t-select { width:100%;padding:10px;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit; }
+.t-select { width:100%;padding:10px;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:8px;font-size:16px;font-family:inherit; }
 .set-row { display:flex;align-items:center;gap:6px;margin-bottom:6px; }
 .set-num { font-size:12px;font-weight:700;color:var(--muted);width:24px;flex-shrink:0;text-align:center; }
-.set-input { flex:1;padding:8px 4px;background:#0f1117;color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:14px;text-align:center;min-width:0; }
+.set-input { flex:1;padding:8px 4px;background:#0f1117;color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:16px;text-align:center;min-width:0; }
 .chrono-btn { background:#1e2444;border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;font-weight:600;padding:6px 10px;cursor:pointer;white-space:nowrap;flex-shrink:0; }
 
 /* ── Diète ── */
@@ -1143,7 +1143,7 @@ function renderSettingsBug() {
   return `
     <div style="font-size:14px;color:#8892a4;margin-bottom:14px;line-height:1.5;">Décris le problème rencontré et sur quelle page. Ton coach le recevra directement.</div>
     <textarea id="bugDesc" placeholder="Ex: Sur la page bilan, le bouton 'Valider' ne répond pas après avoir rempli les champs…"
-      style="width:100%;padding:12px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:10px;font-size:13px;font-family:inherit;resize:none;height:120px;box-sizing:border-box;margin-bottom:12px;"></textarea>
+      style="width:100%;padding:12px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:10px;font-size:16px;font-family:inherit;resize:none;height:120px;box-sizing:border-box;margin-bottom:12px;"></textarea>
     <button onclick="envoyerBugReport()" style="width:100%;padding:13px;background:linear-gradient(135deg,#4f8ef7,#2260c8);border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:pointer;">Envoyer le rapport</button>`;
 }
 

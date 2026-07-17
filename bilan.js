@@ -192,7 +192,7 @@ function renderBilanDetail(data, modeHistorique, isSemainePrecedente) {
       <div class="field-label" style="margin-top:8px;">DIGESTION</div>
       ${renderNotes(r.ligne, 7, 'r'+idx+'_dig', r.digestion)}
       <div class="field-label" style="margin-top:8px;">APPÉTIT</div>
-      <div style="font-size:10px;color:var(--muted);margin:1px 0 4px;">1 = encore faim après le repas · 5 = repu, difficile de finir l'assiette</div>
+      <div style="font-size:10px;color:var(--muted);margin:1px 0 4px;">1 = très faim · 5 = repu, difficile de finir l'assiette</div>
       ${renderNotes(r.ligne, 8, 'r'+idx+'_app', r.appetit)}
     </div>`;
   });
