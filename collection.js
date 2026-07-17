@@ -58,6 +58,27 @@ function renderTitrePill(titreDef, large) {
   </span>`;
 }
 
+// Médaillon du popup de déblocage d'un titre — même langage visuel que
+// renderTitrePill (médaillon en dégradé + halo + bulles décoratives),
+// juste agrandi pour l'écran de célébration plein écran.
+function renderTitreDeblocageVisuel(icon, c1, c2) {
+  return `<div style="position:relative;width:150px;height:150px;display:flex;align-items:center;justify-content:center;">
+    <svg style="position:absolute;inset:0;pointer-events:none;" viewBox="0 0 150 150">
+      <defs>
+        <radialGradient id="dbkbub_a" cx="35%" cy="28%" r="65%"><stop offset="0%" stop-color="#ffffff" stop-opacity="0.75"/><stop offset="55%" stop-color="${c1}" stop-opacity="0.4"/><stop offset="100%" stop-color="${c1}" stop-opacity="0.06"/></radialGradient>
+        <radialGradient id="dbkbub_b" cx="35%" cy="28%" r="65%"><stop offset="0%" stop-color="#ffffff" stop-opacity="0.7"/><stop offset="55%" stop-color="${c1}" stop-opacity="0.36"/><stop offset="100%" stop-color="${c1}" stop-opacity="0.06"/></radialGradient>
+      </defs>
+      <circle cx="20" cy="118" r="17" fill="url(#dbkbub_a)" stroke="${c1}" stroke-width="0.8" stroke-opacity="0.65"/>
+      <circle cx="132" cy="28" r="13" fill="url(#dbkbub_b)" stroke="${c1}" stroke-width="0.7" stroke-opacity="0.65"/>
+      <circle cx="138" cy="115" r="9" fill="url(#dbkbub_a)" stroke="${c1}" stroke-width="0.6" stroke-opacity="0.65"/>
+      <ellipse cx="13" cy="108" rx="4.5" ry="3" fill="#ffffff" opacity="0.6" transform="rotate(-25 13 108)"/>
+      <ellipse cx="127" cy="21" rx="3.5" ry="2.3" fill="#ffffff" opacity="0.6" transform="rotate(-25 127 21)"/>
+      <ellipse cx="134" cy="109" rx="2.5" ry="1.7" fill="#ffffff" opacity="0.6" transform="rotate(-25 134 109)"/>
+    </svg>
+    <div style="position:relative;z-index:1;width:96px;height:96px;border-radius:50%;background:linear-gradient(135deg,${c1}cc,${c2});display:flex;align-items:center;justify-content:center;box-shadow:0 0 30px ${c1}66,inset 0 2px 4px rgba(255,255,255,0.25),inset 0 -3px 6px rgba(0,0,0,0.3);font-size:44px;">${icon || '🏆'}</div>
+  </div>`;
+}
+
 const TITRES_DEF = [
   {id:'baby',      nom:'Baby-trotteur',    icon:'👶', c1:'#00E090', c2:'#006A48', cat:'pas',    seuil:150000,  cond:'150 000 pas cumulés'},
   {id:'march',     nom:'Marcheur',         icon:'🚶', c1:'#40C8FF', c2:'#0058A0', cat:'pas',    seuil:300000,  cond:'300 000 pas cumulés'},
@@ -377,7 +398,7 @@ function afficherProchainDeblocage() {
 
   const visuel = item.type === 'niveau'
     ? getBadgeSVG(item.tier, 120, 'dbk')
-    : `<div style="width:96px;height:96px;border-radius:50%;background:linear-gradient(135deg,${tc.c1}cc,${tc.c2});display:flex;align-items:center;justify-content:center;box-shadow:0 0 30px ${tc.c1}66;font-size:44px;">${item.icon || '🏆'}</div>`;
+    : renderTitreDeblocageVisuel(item.icon, tc.c1, tc.c2);
 
   const overlay = document.createElement('div');
   overlay.id = '_deblocageOverlay';
