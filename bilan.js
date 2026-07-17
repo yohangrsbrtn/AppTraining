@@ -192,6 +192,7 @@ function renderBilanDetail(data, modeHistorique, isSemainePrecedente) {
       <div class="field-label" style="margin-top:8px;">DIGESTION</div>
       ${renderNotes(r.ligne, 7, 'r'+idx+'_dig', r.digestion)}
       <div class="field-label" style="margin-top:8px;">APPÉTIT</div>
+      <div style="font-size:10px;color:var(--muted);margin:1px 0 4px;">1 = encore faim après le repas · 5 = repu, difficile de finir l'assiette</div>
       ${renderNotes(r.ligne, 8, 'r'+idx+'_app', r.appetit)}
     </div>`;
   });
@@ -280,12 +281,30 @@ function renderBilanDetail(data, modeHistorique, isSemainePrecedente) {
 
 // ── Composants ────────────────────────────────────────────────────────
 
+// Adhésion/digestion sont des notes "qualité" (1 = mauvais, 5 = bon) —
+// crescendo rouge → vert. L'appétit est une échelle informative (faim →
+// rassasié), pas de jugement qualité, donc pas de code couleur dessus.
+const NOTES_PALETTE_QUALITE = ['#e05c5c', '#f0a500', '#eab308', '#8bc34a', '#1D9E75'];
+
+function _paletteNote(groupeId) {
+  return (groupeId.endsWith('_adh') || groupeId.endsWith('_dig')) ? NOTES_PALETTE_QUALITE : null;
+}
+
+function _styleNoteBtn(i, valeur, palette) {
+  const active = valeur === i;
+  if (!palette) return `background:${active ? '#378ADD' : '#2d3142'};color:#e8eaf0;border:none;`;
+  const c = palette[i - 1];
+  return active
+    ? `background:${c};color:#fff;border:none;`
+    : `background:${c}22;color:${c};border:1px solid ${c}55;`;
+}
+
 function renderNotes(ligne, col, groupeId, valActuelle) {
+  const palette = _paletteNote(groupeId);
   let h = `<div style="display:flex;gap:4px;margin:3px 0;">`;
   for (let i = 1; i <= 5; i++) {
-    const active = valActuelle === i;
     h += `<button id="${groupeId}_${i}" onclick="noterRepas(${ligne},${col},${i},'${groupeId}')"
-      style="flex:1;padding:8px 0;background:${active?'#378ADD':'#2d3142'};border:none;border-radius:6px;color:#e8eaf0;font-size:14px;font-weight:600;cursor:pointer;">${i}</button>`;
+      style="flex:1;padding:8px 0;${_styleNoteBtn(i, valActuelle, palette)}border-radius:6px;font-size:14px;font-weight:600;cursor:pointer;">${i}</button>`;
   }
   return h + '</div>';
 }
@@ -302,9 +321,10 @@ function renderToggle(ligne, col, elemId, val, label) {
 function noterRepas(ligne, col, valeur, groupeId) {
   sauverBilan(ligne, col, valeur);
   _bilanNotes[groupeId] = valeur;
+  const palette = _paletteNote(groupeId);
   for (let i = 1; i <= 5; i++) {
     const btn = document.getElementById(groupeId + '_' + i);
-    if (btn) btn.style.background = (i === valeur) ? '#378ADD' : '#2d3142';
+    if (btn) btn.style.cssText = 'flex:1;padding:8px 0;' + _styleNoteBtn(i, valeur, palette) + 'border-radius:6px;font-size:14px;font-weight:600;cursor:pointer;';
   }
 }
 
