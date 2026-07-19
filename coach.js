@@ -459,12 +459,13 @@ function renderAlimentsAValider() {
             <div style="font-size:11px;color:#8892a4;margin-top:2px;">Ajouté par ${esc(a.ajoutePar)} · ${esc(a.date)}</div>
           </div>
         </div>
-        <div style="display:flex;justify-content:space-around;text-align:center;padding:10px 0;background:#0f1117;border-radius:8px;margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-around;text-align:center;padding:10px 0;background:#0f1117;border-radius:8px;margin-bottom:6px;">
           <div><span style="font-size:13px;font-weight:600;">${Math.round(a.kcal*100)}</span><div class="macro-label">KCAL/100g</div></div>
           <div><span style="font-size:13px;font-weight:600;color:#378ADD;">${Math.round(a.prot*100)}</span><div class="macro-label">PROT</div></div>
           <div><span style="font-size:13px;font-weight:600;color:var(--green);">${Math.round(a.glu*100)}</span><div class="macro-label">GLU</div></div>
           <div><span style="font-size:13px;font-weight:600;color:#D85A30;">${Math.round(a.lip*100)}</span><div class="macro-label">LIP</div></div>
         </div>
+        <div style="font-size:11px;color:var(--muted);text-align:center;margin-bottom:10px;">dont sucres ${Math.round((a.sucres||0)*100)}g · fibres ${Math.round((a.fibres||0)*100)}g · dont AGS ${Math.round((a.ags||0)*100)}g</div>
         <div style="display:flex;gap:8px;">
           <button onclick="validerAlimentCoachAction(${a.ligne})" style="flex:1;padding:10px;background:linear-gradient(135deg,#1D9E75,#167a5a);border:none;border-radius:8px;color:#fff;font-size:13px;font-weight:700;cursor:pointer;">✓ Valider</button>
           <button onclick="supprimerAlimentCoachAction(${a.ligne})" style="flex:1;padding:10px;background:#2d3142;border:none;border-radius:8px;color:#e05c5c;font-size:13px;font-weight:700;cursor:pointer;">✕ Supprimer</button>

@@ -273,6 +273,7 @@ function selectionnerAliment(nom, source) {
 
 function renderModalAjoutQuantite() {
   const a = _dAjoutSelection;
+  const aDetail = a.sucres !== null; // base coach = pas de détail sucres/fibres/AGS
   return `
     <div style="font-size:11px;font-weight:600;color:#555e7a;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Ajouter</div>
     <div style="font-size:18px;font-weight:700;color:#f0f2ff;margin-bottom:16px;">${esc(a.nom)}</div>
@@ -281,12 +282,13 @@ function renderModalAjoutQuantite() {
       <input id="dAjoutQte" type="text" inputmode="numeric" placeholder="ex: 100" oninput="_majPreviewAjout()"
         style="width:100%;padding:12px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:10px;font-size:16px;box-sizing:border-box;">
     </div>
-    <div id="dAjoutPreview" style="display:flex;justify-content:space-around;text-align:center;margin-bottom:20px;padding:12px 0;background:#0f1117;border-radius:10px;">
+    <div id="dAjoutPreview" style="display:flex;justify-content:space-around;text-align:center;padding:12px 0;background:#0f1117;border-radius:10px;">
       <div><span style="font-size:14px;font-weight:600;">0</span><div class="macro-label">KCAL</div></div>
       <div><span style="font-size:14px;font-weight:600;color:#378ADD;">0</span><div class="macro-label">PROT</div></div>
       <div><span style="font-size:14px;font-weight:600;color:var(--green);">0</span><div class="macro-label">GLU</div></div>
       <div><span style="font-size:14px;font-weight:600;color:#D85A30;">0</span><div class="macro-label">LIP</div></div>
     </div>
+    <div id="dAjoutPreviewDetail" style="font-size:11px;color:var(--muted);text-align:center;margin:8px 0 20px;">${aDetail ? 'dont sucres <span id="dPrevSucres">0</span>g · fibres <span id="dPrevFibres">0</span>g · dont AGS <span id="dPrevAgs">0</span>g' : ''}</div>
     <button onclick="confirmerAjoutAliment()" style="width:100%;padding:14px;background:linear-gradient(135deg,#a78bfa,#6d3fd6);border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">Ajouter</button>
     <button onclick="_dAjoutEtape='recherche';_afficherModalAjout(false);" style="width:100%;margin-top:8px;padding:12px;background:#2d3142;border:none;border-radius:12px;color:#8892a4;font-size:14px;cursor:pointer;">‹ Retour</button>`;
 }
@@ -298,6 +300,10 @@ function _majPreviewAjout() {
   const qte = parseFloat((document.getElementById('dAjoutQte')||{}).value) || 0;
   const vals = [Math.round(a.kcal*qte), Math.round(a.prot*qte), Math.round(a.glu*qte), Math.round(a.lip*qte)];
   prev.querySelectorAll('span').forEach((s, i) => { s.textContent = vals[i]; });
+  if (a.sucres !== null) {
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = Math.round(v*qte); };
+    set('dPrevSucres', a.sucres); set('dPrevFibres', a.fibres); set('dPrevAgs', a.ags);
+  }
 }
 
 async function confirmerAjoutAliment() {
@@ -305,7 +311,10 @@ async function confirmerAjoutAliment() {
   const qte = parseFloat((document.getElementById('dAjoutQte')||{}).value) || 0;
   if (!a || qte <= 0) return;
   try {
-    await api('ajouterAjoutLibre', { nom: a.nom, quantite: qte, kcal: a.kcal*qte, prot: a.prot*qte, glu: a.glu*qte, lip: a.lip*qte });
+    await api('ajouterAjoutLibre', {
+      nom: a.nom, quantite: qte, kcal: a.kcal*qte, prot: a.prot*qte, glu: a.glu*qte,
+      sucres: (a.sucres||0)*qte, fibres: (a.fibres||0)*qte, lip: a.lip*qte, ags: (a.ags||0)*qte
+    });
     _dAjoutsLibres = await api('listerAjoutsLibres');
     setPage('diete');
   } catch(e) { showToast('Erreur : ' + e.message, '#c0392b'); }
@@ -327,29 +336,40 @@ function renderModalAjoutCreation() {
         style="width:100%;padding:12px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:10px;font-size:16px;box-sizing:border-box;">
     </div>
     <div style="font-size:11px;color:#8892a4;margin-bottom:6px;">POUR 100g</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
       <div><div style="font-size:10px;color:#8892a4;margin-bottom:4px;">Kcal</div><input id="dCreaKcal" type="text" inputmode="decimal" placeholder="0" style="width:100%;padding:10px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:8px;font-size:16px;box-sizing:border-box;"></div>
       <div><div style="font-size:10px;color:#8892a4;margin-bottom:4px;">Protéines (g)</div><input id="dCreaProt" type="text" inputmode="decimal" placeholder="0" style="width:100%;padding:10px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:8px;font-size:16px;box-sizing:border-box;"></div>
       <div><div style="font-size:10px;color:#8892a4;margin-bottom:4px;">Glucides (g)</div><input id="dCreaGlu" type="text" inputmode="decimal" placeholder="0" style="width:100%;padding:10px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:8px;font-size:16px;box-sizing:border-box;"></div>
+      <div><div style="font-size:10px;color:#8892a4;margin-bottom:4px;">dont Sucres (g)</div><input id="dCreaSucres" type="text" inputmode="decimal" placeholder="0" style="width:100%;padding:10px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:8px;font-size:16px;box-sizing:border-box;"></div>
       <div><div style="font-size:10px;color:#8892a4;margin-bottom:4px;">Lipides (g)</div><input id="dCreaLip" type="text" inputmode="decimal" placeholder="0" style="width:100%;padding:10px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:8px;font-size:16px;box-sizing:border-box;"></div>
+      <div><div style="font-size:10px;color:#8892a4;margin-bottom:4px;">dont AGS (g)</div><input id="dCreaAgs" type="text" inputmode="decimal" placeholder="0" style="width:100%;padding:10px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:8px;font-size:16px;box-sizing:border-box;"></div>
+      <div style="grid-column:1 / -1;"><div style="font-size:10px;color:#8892a4;margin-bottom:4px;">Fibres (g)</div><input id="dCreaFibres" type="text" inputmode="decimal" placeholder="0" style="width:100%;padding:10px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:8px;font-size:16px;box-sizing:border-box;"></div>
     </div>
+    <div style="font-size:11px;color:#555e7a;margin-bottom:12px;">Sucres, AGS et fibres sont optionnels.</div>
     <div id="dCreaErr" style="display:none;font-size:12px;color:#e05252;margin-bottom:12px;"></div>
     <button onclick="confirmerCreationAliment()" style="width:100%;padding:14px;background:linear-gradient(135deg,#a78bfa,#6d3fd6);border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">Créer et ajouter</button>
     <button onclick="_dAjoutEtape='recherche';_afficherModalAjout(false);" style="width:100%;margin-top:8px;padding:12px;background:#2d3142;border:none;border-radius:12px;color:#8892a4;font-size:14px;cursor:pointer;">‹ Retour</button>`;
 }
 
 async function confirmerCreationAliment() {
+  const val = id => parseFloat((document.getElementById(id).value||'').replace(',','.')) || 0;
   const nom = (document.getElementById('dCreaNom').value || '').trim();
-  const kcal100 = parseFloat((document.getElementById('dCreaKcal').value||'').replace(',','.')) || 0;
-  const prot100 = parseFloat((document.getElementById('dCreaProt').value||'').replace(',','.')) || 0;
-  const glu100  = parseFloat((document.getElementById('dCreaGlu').value||'').replace(',','.')) || 0;
-  const lip100  = parseFloat((document.getElementById('dCreaLip').value||'').replace(',','.')) || 0;
+  const kcal100   = val('dCreaKcal');
+  const prot100   = val('dCreaProt');
+  const glu100    = val('dCreaGlu');
+  const sucres100 = val('dCreaSucres');
+  const lip100    = val('dCreaLip');
+  const ags100    = val('dCreaAgs');
+  const fibres100 = val('dCreaFibres');
   const errEl = document.getElementById('dCreaErr');
   if (!nom) { errEl.textContent = 'Entre un nom.'; errEl.style.display = 'block'; return; }
   if (kcal100 <= 0) { errEl.textContent = 'Entre au moins les calories.'; errEl.style.display = 'block'; return; }
   errEl.style.display = 'none';
   try {
-    const res = await api('ajouterAlimentCommunaute', { nom, kcal: kcal100/100, prot: prot100/100, glu: glu100/100, lip: lip100/100 });
+    const res = await api('ajouterAlimentCommunaute', {
+      nom, kcal: kcal100/100, prot: prot100/100, glu: glu100/100,
+      sucres: sucres100/100, fibres: fibres100/100, lip: lip100/100, ags: ags100/100
+    });
     if (!res || !res.ok) { errEl.textContent = 'Erreur lors de la création.'; errEl.style.display = 'block'; return; }
     if (_dBaseAliments) _dBaseAliments.communaute.push(res.aliment);
     _dAjoutSelection = res.aliment;
