@@ -649,14 +649,15 @@ function renderRepasSlotCard(slotNum, slotReel, repasCible) {
 
   if (slotReel) {
     const aliments = _resoudreSlot(slotReel);
-    return `<div class="card">
+    const modifiable = slotReel.type === 'menu'; // un repas du coach n'est jamais éditable, seul le sien
+    return `<div class="card"${modifiable ? ` onclick="ouvrirModificationSlotJournal(${slotNum})" style="cursor:pointer;"` : ''}>
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px;">
         <div>
-          <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">Repas ${slotNum}</div>
+          <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">Repas ${slotNum}${modifiable ? ' · appuyer pour modifier' : ''}</div>
           <div style="font-size:15px;font-weight:700;margin-top:2px;">${esc(slotReel.label)}</div>
           ${cibleLigne}
         </div>
-        <button onclick="_guardAction(() => supprimerSlotJournalClient(${slotReel.ligne}), this)" style="background:transparent;border:none;color:#8892a4;font-size:16px;cursor:pointer;line-height:1;">✕</button>
+        <button onclick="event.stopPropagation();_guardAction(() => supprimerSlotJournalClient(${slotReel.ligne}), this)" style="background:transparent;border:none;color:#8892a4;font-size:16px;cursor:pointer;line-height:1;">✕</button>
       </div>
       ${rendreCorpsRepas({ aliments })}
     </div>`;
@@ -741,14 +742,45 @@ function ouvrirComposeJournal() {
   setPage('diete');
 }
 
+// Rouvre un repas déjà rempli (type 'menu' uniquement — un repas du coach n'est jamais
+// modifiable, seule sa suppression est possible) pour changer ses aliments/dosages. Réutilise
+// l'écran "Composer" avec _dMenuDraft.menuIdEdition renseigné ; confirmerComposeJournal()
+// bascule alors sur modifierMenu() au lieu de creerMenu().
+function ouvrirModificationSlotJournal(slotNum) {
+  const slotReel = (_dJournal||[]).find(s => s.date === _dJournalDateOuverte && s.slot === slotNum && s.type === 'menu');
+  if (!slotReel) return;
+  const m = (_dMenus||[]).find(mm => mm.menuId === slotReel.ref);
+  if (!m) return;
+  let cible = { cals: null, prot: null, glu: null, lip: null };
+  const cibleJour = _cibleJournalActuelle();
+  if (cibleJour) {
+    const repasCible = cibleJour.repas[slotNum - 1];
+    if (repasCible) {
+      const sc = _sommeAliments(repasCible.aliments);
+      cible = { cals: Math.round(sc.cals), prot: Math.round(sc.prot), glu: Math.round(sc.glu), lip: Math.round(sc.lip) };
+    }
+  }
+  _dMenuDraft = {
+    nom: m.nom,
+    aliments: m.aliments.map(a => ({ nom:a.nom, quantite:a.quantite, kcal:a.kcal, prot:a.prot, glu:a.glu, sucres:a.sucres, fibres:a.fibres, lip:a.lip, ags:a.ags })),
+    cible, menuIdEdition: m.menuId
+  };
+  _dJournalSlotEnEdition = slotNum;
+  _dJournalAjoutEtape = 'compose';
+  setPage('diete');
+}
+
 function annulerComposeJournal() {
+  const enEdition = !!(_dMenuDraft && _dMenuDraft.menuIdEdition);
   _dMenuDraft = null;
-  _dJournalAjoutEtape = 'choix';
+  _dJournalAjoutEtape = enEdition ? null : 'choix';
+  if (enEdition) _dJournalSlotEnEdition = null;
   setPage('diete');
 }
 
 function renderJournalCompose() {
   const d = _dMenuDraft;
+  const enEdition = !!d.menuIdEdition;
   const s = _sommeAliments(d.aliments);
   const lignes = d.aliments.map((a, i) => `
     <div onclick="ouvrirModifQuantiteDraft(${i})" style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer;">
@@ -760,7 +792,7 @@ function renderJournalCompose() {
     </div>`).join('');
 
   return `<div id="app">
-    ${renderHeader('Composer un repas', _dJournalDateOuverte, false)}
+    ${renderHeader(enEdition ? 'Modifier le repas' : 'Composer un repas', _dJournalDateOuverte, false)}
     <div class="page">
       <button class="btn-secondary" onclick="annulerComposeJournal()" style="margin-bottom:12px;">← Annuler</button>
       <div class="card">
@@ -777,7 +809,7 @@ function renderJournalCompose() {
         </div>` : ''}
         <button onclick="ouvrirAjoutAliment()" style="width:100%;margin-top:${d.aliments.length?'12px':'8px'};padding:12px;background:#2d3142;border:none;border-radius:10px;color:#a78bfa;font-size:14px;font-weight:700;cursor:pointer;">+ Ajouter un aliment</button>
       </div>
-      <button onclick="_guardAction(confirmerComposeJournal, this)" style="width:100%;margin-top:12px;padding:14px;background:linear-gradient(135deg,#a78bfa,#6d3fd6);border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">Ajouter au journal</button>
+      <button onclick="_guardAction(confirmerComposeJournal, this)" style="width:100%;margin-top:12px;padding:14px;background:linear-gradient(135deg,#a78bfa,#6d3fd6);border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">${enEdition ? 'Enregistrer les modifications' : 'Ajouter au journal'}</button>
     </div>
     ${renderNavBar('diete')}
   </div>`;
@@ -788,10 +820,23 @@ async function confirmerComposeJournal() {
   const slot = _dJournalSlotEnEdition;
   const nom = (document.getElementById('dComposeNom').value || '').trim() || ('Repas ' + slot + ' du ' + _dJournalDateOuverte);
   try {
-    const res = await api('creerMenu', { nom, aliments: _dMenuDraft.aliments });
-    if (!res || !res.ok) { showToast('Erreur lors de la création.', '#c0392b'); return; }
-    const res2 = await api('ajouterSlotJournal', { date: _dJournalDateOuverte, slot, type: 'menu', ref: res.menuId, label: nom });
-    if (!res2 || !res2.ok) { showToast(res2 && res2.erreur === 'slot_deja_rempli' ? 'Ce repas est déjà rempli.' : 'Erreur.', '#c0392b'); return; }
+    if (_dMenuDraft.menuIdEdition) {
+      const res = await api('modifierMenu', { menuId: _dMenuDraft.menuIdEdition, nom, aliments: _dMenuDraft.aliments });
+      if (!res || !res.ok) { showToast('Erreur lors de la modification.', '#c0392b'); return; }
+      // Le Label affiché dans le journal est une copie figée au moment de l'ajout — si le nom
+      // a changé, on rafraîchit la ligne du slot (slot explicite désormais, donc sûr de
+      // supprimer/réinsérer sans perdre sa position).
+      const slotActuel = (_dJournal||[]).find(s => s.date === _dJournalDateOuverte && s.slot === slot && s.type === 'menu');
+      if (slotActuel && slotActuel.label !== nom) {
+        await api('supprimerSlotJournal', { ligne: slotActuel.ligne });
+        await api('ajouterSlotJournal', { date: _dJournalDateOuverte, slot, type: 'menu', ref: _dMenuDraft.menuIdEdition, label: nom });
+      }
+    } else {
+      const res = await api('creerMenu', { nom, aliments: _dMenuDraft.aliments });
+      if (!res || !res.ok) { showToast('Erreur lors de la création.', '#c0392b'); return; }
+      const res2 = await api('ajouterSlotJournal', { date: _dJournalDateOuverte, slot, type: 'menu', ref: res.menuId, label: nom });
+      if (!res2 || !res2.ok) { showToast(res2 && res2.erreur === 'slot_deja_rempli' ? 'Ce repas est déjà rempli.' : 'Erreur.', '#c0392b'); return; }
+    }
     _dMenus = await api('listerMenus');
     _dJournal = await api('listerJournal');
     _dMenuDraft = null;
