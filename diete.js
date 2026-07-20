@@ -357,7 +357,7 @@ function renderDieteJournal() {
     ${renderDieteTabs('journal')}
     <div class="page">
       <div class="card" style="display:flex;gap:8px;align-items:center;">
-        <input id="dJournalDatePicker" type="date" style="flex:1;padding:10px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:10px;font-size:16px;box-sizing:border-box;">
+        <input id="dJournalDatePicker" type="date" value="${isoDate(new Date())}" style="flex:1;padding:10px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:10px;font-size:16px;box-sizing:border-box;">
         <button onclick="ouvrirJourJournalDepuisPicker()" style="padding:10px 16px;background:linear-gradient(135deg,#a78bfa,#6d3fd6);border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:pointer;white-space:nowrap;">Ouvrir</button>
       </div>
       ${jours.length ? rows : '<div class="empty"><div class="empty-icon">📓</div><div class="empty-text">Aucun jour enregistré.</div></div>'}
