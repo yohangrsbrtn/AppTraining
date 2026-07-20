@@ -11,11 +11,17 @@ let _dMenuVue    = 'liste'; // 'liste' | 'creation'
 let _dMenuDraft  = null; // { nom, aliments: [] } en cours de construction
 
 // ── Mon journal (jours perso, jusqu'à 7 repas, chacun = repas coach ou menu) ──
-let _dJournal             = null; // null = jamais chargé, sinon liste brute de slots
+// Chaque jour peut avoir une "diète cible" (Type='cible' dans JournalDiete) : les repas du
+// jour sont alors affichés en emplacements fixes "Repas 1"…"Repas N" (N = nb de repas de la
+// diète cible), chacun avec la cible de macros du repas correspondant — pour faire des
+// équivalences. Sans cible, 7 emplacements génériques sans cible affichée.
+let _dJournal             = null; // null = jamais chargé, sinon liste brute de slots (incl. la ligne 'cible')
 let _dJournalDateOuverte  = '';   // date (dd/MM/yyyy) du jour ouvert, '' = liste des jours
+let _dJournalCibleEtape   = null; // null | 'choix' — sélection de la diète cible du jour
+let _dJournalSlotEnEdition= null; // 1-7 : numéro du "Repas N" en cours de remplissage
 let _dJournalAjoutEtape   = null; // null | 'choix' | 'coach-dietes' | 'coach-repas' | 'menu' | 'compose'
-let _dJournalDieteChoisie = null; // { ligne, col, nom, repas } — diète en cours de parcours
-let _dDieteDetailCache    = {};   // "ligne|col" -> détail chargerDieteParPosition (résolution des slots coach)
+let _dJournalDieteChoisie = null; // { ligne, col, nom, repas } — diète en cours de parcours (choix d'un repas coach)
+let _dDieteDetailCache    = {};   // "ligne|col" -> détail chargerDieteParPosition (résolution cible + slots coach)
 
 // ── Modale de recherche/ajout/création d'aliment (alimente _dMenuDraft) ──────
 let _dBaseAliments          = null;
@@ -335,7 +341,7 @@ async function confirmerCreationMenu() {
 
 function _joursJournal() {
   const parDate = {};
-  (_dJournal || []).forEach(s => { (parDate[s.date] = parDate[s.date] || []).push(s); });
+  (_dJournal || []).filter(s => s.type !== 'cible').forEach(s => { (parDate[s.date] = parDate[s.date] || []).push(s); });
   const toKey = d => { const p = (d+'').split('/'); return p.length===3 ? p[2]+p[1].padStart(2,'0')+p[0].padStart(2,'0') : '0'; };
   return Object.keys(parDate).sort((a,b) => toKey(b).localeCompare(toKey(a))).map(date => ({ date, slots: parDate[date] }));
 }
@@ -374,15 +380,19 @@ function ouvrirJourJournalDepuisPicker() {
 }
 
 async function ouvrirJourJournal(dateStr) {
-  const slots = (_dJournal || []).filter(s => s.date === dateStr && s.type === 'coach');
-  const refs = [...new Set(slots.map(s => s.ref))].map(ref => ref.split('|'));
-  const aCharger = refs.filter(([l,c]) => !_dDieteDetailCache[l+'|'+c]);
+  const slotsCoach = (_dJournal || []).filter(s => s.date === dateStr && s.type === 'coach');
+  const cibleRow = (_dJournal || []).find(s => s.date === dateStr && s.type === 'cible');
+  const refs = slotsCoach.map(s => s.ref.split('|').slice(0,2).join('|'));
+  if (cibleRow) refs.push(cibleRow.ref);
+  const aCharger = [...new Set(refs)].map(ref => ref.split('|')).filter(([l,c]) => !_dDieteDetailCache[l+'|'+c]);
   if (aCharger.length) {
     setPage('diete-loading');
     await Promise.all(aCharger.map(([l,c]) => _resoudreDieteDetail(parseInt(l), parseInt(c))));
   }
   _dJournalDateOuverte = dateStr;
   _dJournalAjoutEtape = null;
+  _dJournalSlotEnEdition = null;
+  _dJournalCibleEtape = null;
   setPage('diete');
 }
 
@@ -410,65 +420,167 @@ function _resoudreSlot(s) {
   return repas ? repas.aliments : [];
 }
 
+// Diète cible du jour actuellement ouvert, résolue (repas + macros) — ou null si aucune.
+function _cibleJournalActuelle() {
+  const row = (_dJournal || []).find(s => s.date === _dJournalDateOuverte && s.type === 'cible');
+  if (!row) return null;
+  const [l, c] = row.ref.split('|');
+  const detail = _dDieteDetailCache[l+'|'+c];
+  return { ligne: parseInt(l), col: parseInt(c), nom: row.label, ligneCibleRow: row.ligne, repas: (detail && detail.repas) || [] };
+}
+
 function renderDieteJournalJour() {
   const date = _dJournalDateOuverte;
-  const slots = (_dJournal || []).filter(s => s.date === date).sort((a,b) => a.ligne - b.ligne);
+  const cible = _cibleJournalActuelle();
+  const slotsReels = (_dJournal || []).filter(s => s.date === date && s.type !== 'cible');
+  const dernierSlotRempli = slotsReels.reduce((m,s) => Math.max(m, s.slot), 0);
+  const nbSlots = Math.max(cible ? cible.repas.length : 0, dernierSlotRempli, cible ? 0 : 7);
+  const nbSlotsAffiches = Math.min(7, Math.max(nbSlots, 1));
+
   let total = { cals:0, prot:0, glu:0, lip:0 };
-  const cards = slots.map((s, i) => {
-    const aliments = _resoudreSlot(s);
-    const som = _sommeAliments(aliments);
-    total.cals += som.cals; total.prot += som.prot; total.glu += som.glu; total.lip += som.lip;
-    return `<div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px;">
-        <div>
-          <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">Repas ${i+1}</div>
-          <div style="font-size:15px;font-weight:700;margin-top:2px;">${esc(s.label)}</div>
-        </div>
-        <button onclick="_guardAction(() => supprimerSlotJournalClient(${s.ligne}))" style="background:transparent;border:none;color:#8892a4;font-size:16px;cursor:pointer;line-height:1;">✕</button>
-      </div>
-      ${rendreCorpsRepas({ aliments })}
-    </div>`;
-  }).join('');
+  let totalCible = { cals:0, prot:0, glu:0, lip:0 };
+  let cards = '';
+  for (let i = 1; i <= nbSlotsAffiches; i++) {
+    const slotReel = slotsReels.find(s => s.slot === i);
+    const repasCible = cible ? cible.repas[i-1] : null;
+    if (repasCible) {
+      const sc = _sommeAliments(repasCible.aliments);
+      totalCible.cals += sc.cals; totalCible.prot += sc.prot; totalCible.glu += sc.glu; totalCible.lip += sc.lip;
+    }
+    if (slotReel) {
+      const som = _sommeAliments(_resoudreSlot(slotReel));
+      total.cals += som.cals; total.prot += som.prot; total.glu += som.glu; total.lip += som.lip;
+    }
+    cards += renderRepasSlotCard(i, slotReel, repasCible);
+  }
 
   return `<div id="app">
     ${renderHeader(date, 'Mon journal', false)}
     <div id="dStickyMacros" style="position:sticky;top:0;z-index:90;background:var(--bg);padding:10px 16px;box-shadow:0 8px 12px -6px rgba(0,0,0,.4);">
-      <div class="card" style="display:flex;justify-content:space-around;text-align:center;padding:14px 8px;margin-bottom:0;">
-        <div><div style="font-size:20px;font-weight:700;">${Math.round(total.cals)}</div><div class="macro-label">KCAL</div></div>
-        <div><div style="font-size:20px;font-weight:700;color:#378ADD;">${Math.round(total.prot)}</div><div class="macro-label">PROT</div></div>
-        <div><div style="font-size:20px;font-weight:700;color:var(--green);">${Math.round(total.glu)}</div><div class="macro-label">GLU</div></div>
-        <div><div style="font-size:20px;font-weight:700;color:#D85A30;">${Math.round(total.lip)}</div><div class="macro-label">LIP</div></div>
+      <div class="card" style="text-align:center;padding:14px 8px;margin-bottom:0;">
+        <div style="display:flex;justify-content:space-around;">
+          <div><div style="font-size:20px;font-weight:700;">${Math.round(total.cals)}</div><div class="macro-label">KCAL</div></div>
+          <div><div style="font-size:20px;font-weight:700;color:#378ADD;">${Math.round(total.prot)}</div><div class="macro-label">PROT</div></div>
+          <div><div style="font-size:20px;font-weight:700;color:var(--green);">${Math.round(total.glu)}</div><div class="macro-label">GLU</div></div>
+          <div><div style="font-size:20px;font-weight:700;color:#D85A30;">${Math.round(total.lip)}</div><div class="macro-label">LIP</div></div>
+        </div>
+        ${cible ? `<div style="font-size:11px;color:var(--muted);margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">Cible (${esc(cible.nom)}) : ${Math.round(totalCible.cals)} kcal · ${Math.round(totalCible.prot)}P · ${Math.round(totalCible.glu)}G · ${Math.round(totalCible.lip)}L</div>` : ''}
       </div>
     </div>
     <div class="page">
       <button class="btn-secondary" onclick="fermerJourJournal()" style="margin-bottom:12px;">← Retour</button>
+      ${renderDieteCibleSelecteur(cible)}
       ${cards}
-      ${slots.length < 7 ? renderJournalAjoutSlot() : '<div style="font-size:12px;color:var(--muted);text-align:center;padding:8px 0;">7 repas — journée complète.</div>'}
     </div>
     ${renderNavBar('diete')}
   </div>`;
 }
 
-function renderJournalAjoutSlot() {
-  if (_dJournalAjoutEtape === 'choix') {
-    return `<div class="card">
-      <div style="font-size:13px;color:var(--muted);margin-bottom:10px;">Choisis la source du repas</div>
-      <button onclick="_dJournalAjoutEtape='coach-dietes';setPage('diete')" style="width:100%;padding:12px;background:#2d3142;border:none;border-radius:10px;color:#e8eaf0;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:8px;">📋 Un repas de ma diète</button>
-      <button onclick="_dJournalAjoutEtape='menu';setPage('diete')" style="width:100%;padding:12px;background:#2d3142;border:none;border-radius:10px;color:#e8eaf0;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:8px;">🍽️ Un de mes menus</button>
-      <button onclick="ouvrirComposeJournal()" style="width:100%;padding:12px;background:#2d3142;border:none;border-radius:10px;color:#e8eaf0;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:8px;">🥗 Composer avec des aliments</button>
-      <button onclick="_dJournalAjoutEtape=null;setPage('diete')" style="width:100%;padding:10px;background:transparent;border:none;color:#8892a4;font-size:13px;cursor:pointer;">Annuler</button>
-    </div>`;
-  }
-  if (_dJournalAjoutEtape === 'coach-dietes') {
+function renderDieteCibleSelecteur(cible) {
+  if (_dJournalCibleEtape === 'choix') {
     const rows = (_dDietes||[]).map(d => `
-      <div class="diete-item" onclick="choisirDieteJournal(${d.ligne},${d.col},'${(d.nom||'').replace(/'/g,"\\'")}')">
+      <div class="diete-item" onclick="_guardAction(() => choisirDieteCible(${d.ligne},${d.col},'${(d.nom||'').replace(/'/g,"\\'")}'))">
         <div class="diete-bar"></div><span style="padding-left:8px;font-size:14px;font-weight:600;">${esc(d.nom)}</span><div class="diete-arrow">›</div>
       </div>`).join('');
     return `<div class="card">
+      <div style="font-size:13px;color:var(--muted);margin-bottom:10px;">Quelle diète cible pour ce jour ?</div>
+      ${rows || '<div style="font-size:13px;color:var(--muted);">Aucune diète trouvée.</div>'}
+      <button onclick="_dJournalCibleEtape=null;setPage('diete')" style="width:100%;margin-top:10px;padding:10px;background:transparent;border:none;color:#8892a4;font-size:13px;cursor:pointer;">Annuler</button>
+    </div>`;
+  }
+  return `<div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+    <div style="min-width:0;">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;font-weight:600;">Diète cible</div>
+      <div style="font-size:14px;font-weight:700;margin-top:2px;">${cible ? esc(cible.nom) : 'Aucune sélectionnée'}</div>
+    </div>
+    <div style="display:flex;gap:6px;flex-shrink:0;">
+      <button onclick="_dJournalCibleEtape='choix';setPage('diete')" style="padding:8px 14px;background:#2d3142;border:none;border-radius:8px;color:#a78bfa;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">${cible ? 'Changer' : 'Choisir'}</button>
+      ${cible ? `<button onclick="_guardAction(retirerDieteCible)" style="background:transparent;border:none;color:#8892a4;font-size:16px;cursor:pointer;line-height:1;">✕</button>` : ''}
+    </div>
+  </div>`;
+}
+
+async function choisirDieteCible(ligne, col, nom) {
+  setPage('diete-loading');
+  try {
+    await _resoudreDieteDetail(ligne, col);
+    await api('definirDieteCibleJournal', { date: _dJournalDateOuverte, ligneTitre: ligne, colTitre: col, nom });
+    _dJournal = await api('listerJournal');
+  } catch(e) {}
+  _dJournalCibleEtape = null;
+  setPage('diete');
+}
+
+async function retirerDieteCible() {
+  const cible = _cibleJournalActuelle();
+  if (!cible) return;
+  try {
+    await api('supprimerSlotJournal', { ligne: cible.ligneCibleRow });
+    _dJournal = await api('listerJournal');
+  } catch(e) {}
+  setPage('diete');
+}
+
+function renderRepasSlotCard(slotNum, slotReel, repasCible) {
+  const cibleLigne = repasCible ? (() => {
+    const sc = _sommeAliments(repasCible.aliments);
+    return `<div style="font-size:11px;color:var(--muted);margin-top:4px;">Cible : ${Math.round(sc.cals)} kcal · ${Math.round(sc.prot)}P · ${Math.round(sc.glu)}G · ${Math.round(sc.lip)}L</div>`;
+  })() : '';
+
+  if (_dJournalSlotEnEdition === slotNum && _dJournalAjoutEtape) {
+    return `<div class="card">
+      <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;margin-bottom:2px;">Repas ${slotNum}</div>
+      ${cibleLigne}
+      <div style="margin-top:10px;">${renderJournalChoixSource()}</div>
+    </div>`;
+  }
+
+  if (slotReel) {
+    const aliments = _resoudreSlot(slotReel);
+    return `<div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px;">
+        <div>
+          <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">Repas ${slotNum}</div>
+          <div style="font-size:15px;font-weight:700;margin-top:2px;">${esc(slotReel.label)}</div>
+          ${cibleLigne}
+        </div>
+        <button onclick="_guardAction(() => supprimerSlotJournalClient(${slotReel.ligne}))" style="background:transparent;border:none;color:#8892a4;font-size:16px;cursor:pointer;line-height:1;">✕</button>
+      </div>
+      ${rendreCorpsRepas({ aliments })}
+    </div>`;
+  }
+
+  return `<div class="card">
+    <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">Repas ${slotNum}</div>
+    ${cibleLigne}
+    <button onclick="_dJournalSlotEnEdition=${slotNum};_dJournalAjoutEtape='choix';setPage('diete')" style="width:100%;margin-top:10px;padding:12px;background:#2d3142;border:none;border-radius:10px;color:#a78bfa;font-size:14px;font-weight:700;cursor:pointer;">+ Choisir ce repas</button>
+  </div>`;
+}
+
+function annulerChoixSlotJournal() {
+  _dJournalAjoutEtape = null;
+  _dJournalSlotEnEdition = null;
+  _dJournalDieteChoisie = null;
+  setPage('diete');
+}
+
+function renderJournalChoixSource() {
+  if (_dJournalAjoutEtape === 'choix') {
+    return `
+      <button onclick="_dJournalAjoutEtape='coach-dietes';setPage('diete')" style="width:100%;padding:12px;background:#161b2e;border:none;border-radius:10px;color:#e8eaf0;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:8px;">📋 Un repas de ma diète</button>
+      <button onclick="_dJournalAjoutEtape='menu';setPage('diete')" style="width:100%;padding:12px;background:#161b2e;border:none;border-radius:10px;color:#e8eaf0;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:8px;">🍽️ Un de mes menus</button>
+      <button onclick="ouvrirComposeJournal()" style="width:100%;padding:12px;background:#161b2e;border:none;border-radius:10px;color:#e8eaf0;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:8px;">🥗 Composer avec des aliments</button>
+      <button onclick="annulerChoixSlotJournal()" style="width:100%;padding:10px;background:transparent;border:none;color:#8892a4;font-size:13px;cursor:pointer;">Annuler</button>`;
+  }
+  if (_dJournalAjoutEtape === 'coach-dietes') {
+    const rows = (_dDietes||[]).map(d => `
+      <div class="diete-item" onclick="_guardAction(() => choisirDieteJournal(${d.ligne},${d.col},'${(d.nom||'').replace(/'/g,"\\'")}'))">
+        <div class="diete-bar"></div><span style="padding-left:8px;font-size:14px;font-weight:600;">${esc(d.nom)}</span><div class="diete-arrow">›</div>
+      </div>`).join('');
+    return `
       <div style="font-size:13px;color:var(--muted);margin-bottom:10px;">Depuis quelle diète ?</div>
       ${rows || '<div style="font-size:13px;color:var(--muted);">Aucune diète trouvée.</div>'}
-      <button onclick="_dJournalAjoutEtape='choix';setPage('diete')" style="width:100%;margin-top:10px;padding:10px;background:transparent;border:none;color:#8892a4;font-size:13px;cursor:pointer;">‹ Retour</button>
-    </div>`;
+      <button onclick="_dJournalAjoutEtape='choix';setPage('diete')" style="width:100%;margin-top:10px;padding:10px;background:transparent;border:none;color:#8892a4;font-size:13px;cursor:pointer;">‹ Retour</button>`;
   }
   if (_dJournalAjoutEtape === 'coach-repas') {
     const dc = _dJournalDieteChoisie;
@@ -477,24 +589,22 @@ function renderJournalAjoutSlot() {
       <div class="diete-item" onclick="_guardAction(() => ajouterSlotCoach(${idx}))">
         <div class="diete-bar"></div><span style="padding-left:8px;font-size:14px;font-weight:600;">${esc(r.nom)}</span><div class="diete-arrow">›</div>
       </div>`).join('');
-    return `<div class="card">
+    return `
       <div style="font-size:13px;color:var(--muted);margin-bottom:10px;">${esc(dc ? dc.nom : '')} — quel repas ?</div>
       ${rows || '<div style="font-size:13px;color:var(--muted);">Aucun repas trouvé.</div>'}
-      <button onclick="_dJournalAjoutEtape='coach-dietes';setPage('diete')" style="width:100%;margin-top:10px;padding:10px;background:transparent;border:none;color:#8892a4;font-size:13px;cursor:pointer;">‹ Retour</button>
-    </div>`;
+      <button onclick="_dJournalAjoutEtape='coach-dietes';setPage('diete')" style="width:100%;margin-top:10px;padding:10px;background:transparent;border:none;color:#8892a4;font-size:13px;cursor:pointer;">‹ Retour</button>`;
   }
   if (_dJournalAjoutEtape === 'menu') {
     const rows = (_dMenus||[]).map(m => `
       <div class="diete-item" onclick="_guardAction(() => ajouterSlotMenu('${m.menuId}'))">
         <div class="diete-bar"></div><span style="padding-left:8px;font-size:14px;font-weight:600;">${esc(m.nom)}</span><div class="diete-arrow">›</div>
       </div>`).join('');
-    return `<div class="card">
+    return `
       <div style="font-size:13px;color:var(--muted);margin-bottom:10px;">Quel menu ?</div>
       ${rows || '<div style="font-size:13px;color:var(--muted);">Aucun menu créé. Va dans "Mes menus" pour en créer un.</div>'}
-      <button onclick="_dJournalAjoutEtape='choix';setPage('diete')" style="width:100%;margin-top:10px;padding:10px;background:transparent;border:none;color:#8892a4;font-size:13px;cursor:pointer;">‹ Retour</button>
-    </div>`;
+      <button onclick="_dJournalAjoutEtape='choix';setPage('diete')" style="width:100%;margin-top:10px;padding:10px;background:transparent;border:none;color:#8892a4;font-size:13px;cursor:pointer;">‹ Retour</button>`;
   }
-  return `<button onclick="_dJournalAjoutEtape='choix';setPage('diete')" style="width:100%;padding:14px;background:linear-gradient(135deg,#a78bfa,#6d3fd6);border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">+ Ajouter un repas</button>`;
+  return '';
 }
 
 // Compose un repas à la volée pour un slot du journal (plusieurs aliments de la
@@ -551,16 +661,18 @@ function renderJournalCompose() {
 
 async function confirmerComposeJournal() {
   if (!_dMenuDraft.aliments.length) { showToast('Ajoute au moins un aliment.', '#c0392b'); return; }
-  const nom = (document.getElementById('dComposeNom').value || '').trim() || ('Repas du ' + _dJournalDateOuverte);
+  const slot = _dJournalSlotEnEdition;
+  const nom = (document.getElementById('dComposeNom').value || '').trim() || ('Repas ' + slot + ' du ' + _dJournalDateOuverte);
   try {
     const res = await api('creerMenu', { nom, aliments: _dMenuDraft.aliments });
     if (!res || !res.ok) { showToast('Erreur lors de la création.', '#c0392b'); return; }
-    const res2 = await api('ajouterSlotJournal', { date: _dJournalDateOuverte, type: 'menu', ref: res.menuId, label: nom });
-    if (!res2 || !res2.ok) { showToast(res2 && res2.erreur === 'jour_complet' ? 'Cette journée compte déjà 7 repas.' : 'Erreur.', '#c0392b'); return; }
+    const res2 = await api('ajouterSlotJournal', { date: _dJournalDateOuverte, slot, type: 'menu', ref: res.menuId, label: nom });
+    if (!res2 || !res2.ok) { showToast(res2 && res2.erreur === 'slot_deja_rempli' ? 'Ce repas est déjà rempli.' : 'Erreur.', '#c0392b'); return; }
     _dMenus = await api('listerMenus');
     _dJournal = await api('listerJournal');
     _dMenuDraft = null;
     _dJournalAjoutEtape = null;
+    _dJournalSlotEnEdition = null;
     setPage('diete');
   } catch(e) { showToast('Erreur : ' + e.message, '#c0392b'); }
 }
@@ -581,11 +693,13 @@ async function ajouterSlotCoach(idx) {
   if (!r) return;
   const ref = dc.ligne + '|' + dc.col + '|' + idx;
   const label = r.nom + ' · ' + dc.nom;
+  const slot = _dJournalSlotEnEdition;
   try {
-    const res = await api('ajouterSlotJournal', { date: _dJournalDateOuverte, type: 'coach', ref, label });
-    if (!res || !res.ok) { showToast(res && res.erreur === 'jour_complet' ? 'Cette journée compte déjà 7 repas.' : 'Erreur.', '#c0392b'); return; }
+    const res = await api('ajouterSlotJournal', { date: _dJournalDateOuverte, slot, type: 'coach', ref, label });
+    if (!res || !res.ok) { showToast(res && res.erreur === 'slot_deja_rempli' ? 'Ce repas est déjà rempli.' : 'Erreur.', '#c0392b'); return; }
     _dJournal = await api('listerJournal');
     _dJournalAjoutEtape = null;
+    _dJournalSlotEnEdition = null;
     _dJournalDieteChoisie = null;
     setPage('diete');
   } catch(e) { showToast('Erreur : ' + e.message, '#c0392b'); }
@@ -594,11 +708,13 @@ async function ajouterSlotCoach(idx) {
 async function ajouterSlotMenu(menuId) {
   const m = (_dMenus||[]).find(mm => mm.menuId === menuId);
   if (!m) return;
+  const slot = _dJournalSlotEnEdition;
   try {
-    const res = await api('ajouterSlotJournal', { date: _dJournalDateOuverte, type: 'menu', ref: menuId, label: m.nom });
-    if (!res || !res.ok) { showToast(res && res.erreur === 'jour_complet' ? 'Cette journée compte déjà 7 repas.' : 'Erreur.', '#c0392b'); return; }
+    const res = await api('ajouterSlotJournal', { date: _dJournalDateOuverte, slot, type: 'menu', ref: menuId, label: m.nom });
+    if (!res || !res.ok) { showToast(res && res.erreur === 'slot_deja_rempli' ? 'Ce repas est déjà rempli.' : 'Erreur.', '#c0392b'); return; }
     _dJournal = await api('listerJournal');
     _dJournalAjoutEtape = null;
+    _dJournalSlotEnEdition = null;
     setPage('diete');
   } catch(e) { showToast('Erreur : ' + e.message, '#c0392b'); }
 }
