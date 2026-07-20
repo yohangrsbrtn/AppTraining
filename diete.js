@@ -27,18 +27,40 @@ let _dDieteDetailCache    = {};   // "ligne|col" -> détail chargerDieteParPosit
 let _dBaseAliments          = null;
 let _dAjoutEtape            = 'recherche'; // 'recherche' | 'quantite' | 'creation'
 let _dAjoutSelection        = null;
+let _dModifIndex            = null; // index dans _dMenuDraft.aliments en cours de modification (null = ajout d'un nouvel aliment)
 let _dCreationNomPrerempli  = '';
 
 // Garde-fou anti double-tap : un bouton "Créer"/"Ajouter"/"Enregistrer" tapé deux fois
 // rapidement (avant la fin de l'appel réseau précédent) créait autant de lignes en
 // double côté serveur (bug réel constaté sur la création d'aliment). Tous les boutons
-// d'action de cette page passent par _guardAction() au lieu d'appeler la fonction
-// directement, pour n'exécuter qu'un seul appel à la fois.
+// d'action de cette page passent par _guardAction(fn, this) au lieu d'appeler la fonction
+// directement, pour n'exécuter qu'un seul appel à la fois — et pour griser visuellement
+// le bouton tapé le temps de l'appel réseau (les gens re-tapent sinon, pensant que ça n'a
+// pas marché). `this` dans un attribut onclick pointe l'élément cliqué, d'où l'appel
+// _guardAction(fn, this) plutôt qu'un simple _guardAction(fn).
 let _dActionEnCours = false;
-async function _guardAction(fn) {
+async function _guardAction(fn, btn) {
   if (_dActionEnCours) return;
   _dActionEnCours = true;
-  try { await fn(); } finally { _dActionEnCours = false; }
+  let htmlOriginal = null;
+  if (btn) {
+    htmlOriginal = btn.innerHTML;
+    btn.style.opacity = '0.55';
+    btn.style.pointerEvents = 'none';
+    btn.innerHTML = '<span class="spin" style="width:15px;height:15px;border-width:2px;vertical-align:middle;"></span>';
+  }
+  try {
+    await fn();
+  } finally {
+    _dActionEnCours = false;
+    // Si l'action a réussi, setPage() a déjà remplacé tout le DOM (ce bouton n'existe
+    // plus) — ne restaurer que si l'élément est toujours présent (cas d'erreur/annulation).
+    if (btn && htmlOriginal !== null && document.body.contains(btn)) {
+      btn.innerHTML = htmlOriginal;
+      btn.style.opacity = '';
+      btn.style.pointerEvents = '';
+    }
+  }
 }
 
 async function loadDiete() {
@@ -241,7 +263,10 @@ function renderDieteMenus() {
     return `<div class="card">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
         <div style="font-size:15px;font-weight:700;">${esc(m.nom)}</div>
-        <button onclick="_guardAction(() => supprimerMenuClient('${m.menuId}'))" style="background:transparent;border:none;color:#8892a4;font-size:16px;cursor:pointer;line-height:1;">✕</button>
+        <div style="display:flex;gap:4px;flex-shrink:0;">
+          <button onclick="ouvrirModificationMenu('${m.menuId}')" style="background:transparent;border:none;color:#8892a4;font-size:15px;cursor:pointer;line-height:1;padding:2px 4px;">✎</button>
+          <button onclick="_guardAction(() => supprimerMenuClient('${m.menuId}'), this)" style="background:transparent;border:none;color:#8892a4;font-size:16px;cursor:pointer;line-height:1;">✕</button>
+        </div>
       </div>
       <div style="font-size:12px;color:var(--muted);margin:4px 0 10px;">${m.aliments.length} aliment${m.aliments.length>1?'s':''}</div>
       <div style="display:flex;justify-content:space-around;text-align:center;padding-top:10px;border-top:1px solid var(--border);">
@@ -273,7 +298,22 @@ async function supprimerMenuClient(menuId) {
 }
 
 function ouvrirCreationMenu() {
-  _dMenuDraft = { nom: '', aliments: [] };
+  _dMenuDraft = { nom: '', aliments: [], cible: { cals: null, prot: null, glu: null, lip: null }, menuIdEdition: null };
+  _dMenuVue = 'creation';
+  setPage('diete');
+}
+
+// Réutilise le même écran que la création, pré-rempli — modifierMenu() (Code.js) conserve le
+// même MenuId, donc les slots du journal qui référencent déjà ce menu restent valides.
+function ouvrirModificationMenu(menuId) {
+  const m = (_dMenus||[]).find(mm => mm.menuId === menuId);
+  if (!m) return;
+  _dMenuDraft = {
+    nom: m.nom,
+    aliments: m.aliments.map(a => ({ nom:a.nom, quantite:a.quantite, kcal:a.kcal, prot:a.prot, glu:a.glu, sucres:a.sucres, fibres:a.fibres, lip:a.lip, ags:a.ags })),
+    cible: { cals: null, prot: null, glu: null, lip: null },
+    menuIdEdition: menuId
+  };
   _dMenuVue = 'creation';
   setPage('diete');
 }
@@ -289,27 +329,71 @@ function retirerAlimentDraft(i) {
   setPage('diete');
 }
 
+// ── Cible optionnelle affichée pendant la construction d'un menu/repas ───────
+// Toujours présente sur _dMenuDraft.cible ({cals,prot,glu,lip}, chaque champ null tant que
+// non renseigné). Pré-remplie automatiquement à l'ouverture de "Composer" depuis un slot du
+// journal qui a déjà une cible de repas (voir ouvrirComposeJournal) ; sinon laissée vide et
+// modifiable à la main — sert juste de repère visuel, jamais envoyée au serveur.
+function _cibleActive(cible) {
+  return !!cible && (cible.cals != null || cible.prot != null || cible.glu != null || cible.lip != null);
+}
+
+function _setCibleDraft(champ, val) {
+  if (!_dMenuDraft.cible) _dMenuDraft.cible = { cals: null, prot: null, glu: null, lip: null };
+  _dMenuDraft.cible[champ] = val === '' ? null : parseFloat(val);
+  const el = document.getElementById('dCibleComparaison');
+  if (el) el.innerHTML = _renderComparaisonCible();
+}
+
+function _renderCibleInputs() {
+  const c = _dMenuDraft.cible || {};
+  const input = (champ, ph) => `<input type="text" inputmode="decimal" value="${c[champ]!=null?c[champ]:''}" placeholder="${ph}" oninput="_setCibleDraft('${champ}', this.value)"
+    style="width:100%;padding:8px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:8px;font-size:14px;box-sizing:border-box;text-align:center;">`;
+  return `<div style="margin-bottom:14px;">
+    <div style="font-size:11px;color:#8892a4;margin-bottom:6px;">CIBLE (optionnel)</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;">
+      <div>${input('cals','Kcal')}</div>
+      <div>${input('prot','Prot')}</div>
+      <div>${input('glu','Glu')}</div>
+      <div>${input('lip','Lip')}</div>
+    </div>
+    <div id="dCibleComparaison">${_renderComparaisonCible()}</div>
+  </div>`;
+}
+
+function _renderComparaisonCible() {
+  const c = _dMenuDraft.cible;
+  if (!_cibleActive(c)) return '';
+  const s = _sommeAliments(_dMenuDraft.aliments);
+  const val = (actuel, cible) => cible != null ? `${Math.round(actuel)}/${Math.round(cible)}` : `${Math.round(actuel)}`;
+  return `<div style="font-size:11px;color:var(--muted);margin-top:8px;padding-top:8px;border-top:1px solid var(--border);text-align:center;">
+    Cible : ${val(s.cals,c.cals)} kcal · ${val(s.prot,c.prot)}P · ${val(s.glu,c.glu)}G · ${val(s.lip,c.lip)}L
+  </div>`;
+}
+
 function renderDieteMenuCreation() {
   const d = _dMenuDraft;
+  const enEdition = !!d.menuIdEdition;
   const s = _sommeAliments(d.aliments);
   const lignes = d.aliments.map((a, i) => `
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">
+    <div onclick="ouvrirModifQuantiteDraft(${i})" style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer;">
       <div style="min-width:0;">
         <div style="font-size:14px;">${esc(a.nom)}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:1px;">${a.quantite}g · ${Math.round(a.kcal)} kcal</div>
       </div>
-      <button onclick="retirerAlimentDraft(${i})" style="background:transparent;border:none;color:#8892a4;font-size:16px;padding:4px 8px;cursor:pointer;line-height:1;">✕</button>
+      <button onclick="event.stopPropagation();retirerAlimentDraft(${i})" style="background:transparent;border:none;color:#8892a4;font-size:16px;padding:4px 8px;cursor:pointer;line-height:1;">✕</button>
     </div>`).join('');
 
   return `<div id="app">
-    ${renderHeader('Nouveau menu', '', false)}
+    ${renderHeader(enEdition ? 'Modifier le menu' : 'Nouveau menu', '', false)}
     <div class="page">
       <button class="btn-secondary" onclick="annulerCreationMenu()" style="margin-bottom:12px;">← Annuler</button>
       <div class="card">
         <div style="font-size:11px;color:#8892a4;margin-bottom:6px;">NOM DU MENU</div>
         <input id="dMenuNom" type="text" value="${esc(d.nom)}" placeholder="ex: Mon petit-déj maison" oninput="_dMenuDraft.nom=this.value"
           style="width:100%;padding:12px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:10px;font-size:16px;box-sizing:border-box;margin-bottom:14px;">
-        ${d.aliments.length ? lignes : '<div style="font-size:13px;color:var(--muted);text-align:center;padding:8px 0;">Aucun aliment ajouté.</div>'}
+        ${_renderCibleInputs()}
+        ${d.aliments.length ? lignes : '<div style="font-size:13px;color:var(--muted);text-align:center;padding:8px 0;">Aucun aliment ajouté. Tape sur un aliment ajouté pour changer sa quantité.</div>'}
         ${d.aliments.length ? `<div style="display:flex;justify-content:space-around;text-align:center;margin-top:10px;padding-top:10px;border-top:1px solid #a78bfa;">
           <div><span style="font-size:14px;font-weight:600;">${Math.round(s.cals)}</span><div class="macro-label">KCAL</div></div>
           <div><span style="font-size:14px;font-weight:600;color:#378ADD;">${Math.round(s.prot)}</span><div class="macro-label">PROT</div></div>
@@ -318,7 +402,7 @@ function renderDieteMenuCreation() {
         </div>` : ''}
         <button onclick="ouvrirAjoutAliment()" style="width:100%;margin-top:${d.aliments.length?'12px':'8px'};padding:12px;background:#2d3142;border:none;border-radius:10px;color:#a78bfa;font-size:14px;font-weight:700;cursor:pointer;">+ Ajouter un aliment</button>
       </div>
-      <button onclick="_guardAction(confirmerCreationMenu)" style="width:100%;margin-top:12px;padding:14px;background:linear-gradient(135deg,#a78bfa,#6d3fd6);border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">Enregistrer le menu</button>
+      <button onclick="_guardAction(confirmerCreationMenu, this)" style="width:100%;margin-top:12px;padding:14px;background:linear-gradient(135deg,#a78bfa,#6d3fd6);border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">${enEdition ? 'Enregistrer les modifications' : 'Enregistrer le menu'}</button>
     </div>
     ${renderNavBar('diete')}
   </div>`;
@@ -329,7 +413,11 @@ async function confirmerCreationMenu() {
   if (!nom) { showToast('Donne un nom au menu.', '#c0392b'); return; }
   if (!_dMenuDraft.aliments.length) { showToast('Ajoute au moins un aliment.', '#c0392b'); return; }
   try {
-    await api('creerMenu', { nom, aliments: _dMenuDraft.aliments });
+    if (_dMenuDraft.menuIdEdition) {
+      await api('modifierMenu', { menuId: _dMenuDraft.menuIdEdition, nom, aliments: _dMenuDraft.aliments });
+    } else {
+      await api('creerMenu', { nom, aliments: _dMenuDraft.aliments });
+    }
     _dMenus = await api('listerMenus');
     _dMenuDraft = null;
     _dMenuVue = 'liste';
@@ -479,7 +567,7 @@ function renderDieteJournalJour() {
 function renderDieteCibleSelecteur(cible) {
   if (_dJournalCibleEtape === 'choix') {
     const rows = (_dDietes||[]).map(d => `
-      <div class="diete-item" onclick="_guardAction(() => choisirDieteCible(${d.ligne},${d.col},'${(d.nom||'').replace(/'/g,"\\'")}'))">
+      <div class="diete-item" onclick="_guardAction(() => choisirDieteCible(${d.ligne},${d.col},'${(d.nom||'').replace(/'/g,"\\'")}'), this)">
         <div class="diete-bar"></div><span style="padding-left:8px;font-size:14px;font-weight:600;">${esc(d.nom)}</span><div class="diete-arrow">›</div>
       </div>`).join('');
     return `<div class="card">
@@ -495,7 +583,7 @@ function renderDieteCibleSelecteur(cible) {
     </div>
     <div style="display:flex;gap:6px;flex-shrink:0;">
       <button onclick="_dJournalCibleEtape='choix';setPage('diete')" style="padding:8px 14px;background:#2d3142;border:none;border-radius:8px;color:#a78bfa;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">${cible ? 'Changer' : 'Choisir'}</button>
-      ${cible ? `<button onclick="_guardAction(retirerDieteCible)" style="background:transparent;border:none;color:#8892a4;font-size:16px;cursor:pointer;line-height:1;">✕</button>` : ''}
+      ${cible ? `<button onclick="_guardAction(retirerDieteCible, this)" style="background:transparent;border:none;color:#8892a4;font-size:16px;cursor:pointer;line-height:1;">✕</button>` : ''}
     </div>
   </div>`;
 }
@@ -544,7 +632,7 @@ function renderRepasSlotCard(slotNum, slotReel, repasCible) {
           <div style="font-size:15px;font-weight:700;margin-top:2px;">${esc(slotReel.label)}</div>
           ${cibleLigne}
         </div>
-        <button onclick="_guardAction(() => supprimerSlotJournalClient(${slotReel.ligne}))" style="background:transparent;border:none;color:#8892a4;font-size:16px;cursor:pointer;line-height:1;">✕</button>
+        <button onclick="_guardAction(() => supprimerSlotJournalClient(${slotReel.ligne}), this)" style="background:transparent;border:none;color:#8892a4;font-size:16px;cursor:pointer;line-height:1;">✕</button>
       </div>
       ${rendreCorpsRepas({ aliments })}
     </div>`;
@@ -574,7 +662,7 @@ function renderJournalChoixSource() {
   }
   if (_dJournalAjoutEtape === 'coach-dietes') {
     const rows = (_dDietes||[]).map(d => `
-      <div class="diete-item" onclick="_guardAction(() => choisirDieteJournal(${d.ligne},${d.col},'${(d.nom||'').replace(/'/g,"\\'")}'))">
+      <div class="diete-item" onclick="_guardAction(() => choisirDieteJournal(${d.ligne},${d.col},'${(d.nom||'').replace(/'/g,"\\'")}'), this)">
         <div class="diete-bar"></div><span style="padding-left:8px;font-size:14px;font-weight:600;">${esc(d.nom)}</span><div class="diete-arrow">›</div>
       </div>`).join('');
     return `
@@ -586,7 +674,7 @@ function renderJournalChoixSource() {
     const dc = _dJournalDieteChoisie;
     const repasList = (dc && dc.repas) || [];
     const rows = repasList.map((r, idx) => `
-      <div class="diete-item" onclick="_guardAction(() => ajouterSlotCoach(${idx}))">
+      <div class="diete-item" onclick="_guardAction(() => ajouterSlotCoach(${idx}), this)">
         <div class="diete-bar"></div><span style="padding-left:8px;font-size:14px;font-weight:600;">${esc(r.nom)}</span><div class="diete-arrow">›</div>
       </div>`).join('');
     return `
@@ -596,7 +684,7 @@ function renderJournalChoixSource() {
   }
   if (_dJournalAjoutEtape === 'menu') {
     const rows = (_dMenus||[]).map(m => `
-      <div class="diete-item" onclick="_guardAction(() => ajouterSlotMenu('${m.menuId}'))">
+      <div class="diete-item" onclick="_guardAction(() => ajouterSlotMenu('${m.menuId}'), this)">
         <div class="diete-bar"></div><span style="padding-left:8px;font-size:14px;font-weight:600;">${esc(m.nom)}</span><div class="diete-arrow">›</div>
       </div>`).join('');
     return `
@@ -613,7 +701,18 @@ function renderJournalChoixSource() {
 // que "Mes menus", auto-nommé si le client ne donne pas de nom) pour ne pas dupliquer
 // la logique de résolution des slots — seul le nom par défaut change.
 function ouvrirComposeJournal() {
-  _dMenuDraft = { nom: '', aliments: [] };
+  // Pré-remplit la cible depuis le repas correspondant de la diète cible du jour (si
+  // définie) — évite d'avoir à la re-taper à la main alors qu'elle est déjà connue.
+  let cible = { cals: null, prot: null, glu: null, lip: null };
+  const cibleJour = _cibleJournalActuelle();
+  if (cibleJour && _dJournalSlotEnEdition) {
+    const repasCible = cibleJour.repas[_dJournalSlotEnEdition - 1];
+    if (repasCible) {
+      const sc = _sommeAliments(repasCible.aliments);
+      cible = { cals: Math.round(sc.cals), prot: Math.round(sc.prot), glu: Math.round(sc.glu), lip: Math.round(sc.lip) };
+    }
+  }
+  _dMenuDraft = { nom: '', aliments: [], cible, menuIdEdition: null };
   _dJournalAjoutEtape = 'compose';
   setPage('diete');
 }
@@ -628,12 +727,12 @@ function renderJournalCompose() {
   const d = _dMenuDraft;
   const s = _sommeAliments(d.aliments);
   const lignes = d.aliments.map((a, i) => `
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">
+    <div onclick="ouvrirModifQuantiteDraft(${i})" style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer;">
       <div style="min-width:0;">
         <div style="font-size:14px;">${esc(a.nom)}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:1px;">${a.quantite}g · ${Math.round(a.kcal)} kcal</div>
       </div>
-      <button onclick="retirerAlimentDraft(${i})" style="background:transparent;border:none;color:#8892a4;font-size:16px;padding:4px 8px;cursor:pointer;line-height:1;">✕</button>
+      <button onclick="event.stopPropagation();retirerAlimentDraft(${i})" style="background:transparent;border:none;color:#8892a4;font-size:16px;padding:4px 8px;cursor:pointer;line-height:1;">✕</button>
     </div>`).join('');
 
   return `<div id="app">
@@ -644,7 +743,8 @@ function renderJournalCompose() {
         <div style="font-size:11px;color:#8892a4;margin-bottom:6px;">NOM DU REPAS (optionnel)</div>
         <input id="dComposeNom" type="text" value="${esc(d.nom)}" placeholder="ex: Repas libre" oninput="_dMenuDraft.nom=this.value"
           style="width:100%;padding:12px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:10px;font-size:16px;box-sizing:border-box;margin-bottom:14px;">
-        ${d.aliments.length ? lignes : '<div style="font-size:13px;color:var(--muted);text-align:center;padding:8px 0;">Aucun aliment ajouté.</div>'}
+        ${_renderCibleInputs()}
+        ${d.aliments.length ? lignes : '<div style="font-size:13px;color:var(--muted);text-align:center;padding:8px 0;">Aucun aliment ajouté. Tape sur un aliment ajouté pour changer sa quantité.</div>'}
         ${d.aliments.length ? `<div style="display:flex;justify-content:space-around;text-align:center;margin-top:10px;padding-top:10px;border-top:1px solid #a78bfa;">
           <div><span style="font-size:14px;font-weight:600;">${Math.round(s.cals)}</span><div class="macro-label">KCAL</div></div>
           <div><span style="font-size:14px;font-weight:600;color:#378ADD;">${Math.round(s.prot)}</span><div class="macro-label">PROT</div></div>
@@ -653,7 +753,7 @@ function renderJournalCompose() {
         </div>` : ''}
         <button onclick="ouvrirAjoutAliment()" style="width:100%;margin-top:${d.aliments.length?'12px':'8px'};padding:12px;background:#2d3142;border:none;border-radius:10px;color:#a78bfa;font-size:14px;font-weight:700;cursor:pointer;">+ Ajouter un aliment</button>
       </div>
-      <button onclick="_guardAction(confirmerComposeJournal)" style="width:100%;margin-top:12px;padding:14px;background:linear-gradient(135deg,#a78bfa,#6d3fd6);border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">Ajouter au journal</button>
+      <button onclick="_guardAction(confirmerComposeJournal, this)" style="width:100%;margin-top:12px;padding:14px;background:linear-gradient(135deg,#a78bfa,#6d3fd6);border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">Ajouter au journal</button>
     </div>
     ${renderNavBar('diete')}
   </div>`;
@@ -732,6 +832,7 @@ async function supprimerSlotJournalClient(ligne) {
 async function ouvrirAjoutAliment() {
   _dAjoutEtape = 'recherche';
   _dAjoutSelection = null;
+  _dModifIndex = null;
   if (!_dBaseAliments) {
     _afficherModalAjout(true);
     try { _dBaseAliments = await api('chargerBaseAliments'); } catch(e) { _dBaseAliments = { coach: [], communaute: [] }; }
@@ -788,19 +889,40 @@ function selectionnerAliment(nom, source) {
   const found = _tousLesAliments().find(a => a.nom === nom && a.source === source);
   if (!found) return;
   _dAjoutSelection = found;
+  _dModifIndex = null;
+  _dAjoutEtape = 'quantite';
+  _afficherModalAjout(false);
+}
+
+// Ouvre la modale de quantité pré-remplie sur un aliment déjà présent dans le brouillon (menu
+// ou repas en cours de construction), pour changer son dosage sans le retirer/re-chercher.
+// Les valeurs par gramme sont reconstituées en divisant les totaux stockés par la quantité —
+// le brouillon ne garde que les totaux, pas le prix au gramme d'origine, mais la division
+// reste exacte (pas d'arrondi accumulé, la quantité d'origine est toujours > 0).
+function ouvrirModifQuantiteDraft(index) {
+  const item = _dMenuDraft.aliments[index];
+  if (!item) return;
+  const q = item.quantite;
+  _dAjoutSelection = {
+    nom: item.nom, kcal: item.kcal/q, prot: item.prot/q, glu: item.glu/q,
+    sucres: item.sucres/q, fibres: item.fibres/q, lip: item.lip/q, ags: item.ags/q
+  };
+  _dModifIndex = index;
   _dAjoutEtape = 'quantite';
   _afficherModalAjout(false);
 }
 
 function renderModalAjoutQuantite() {
   const a = _dAjoutSelection;
+  const enEdition = _dModifIndex != null;
+  const qteInitiale = enEdition ? _dMenuDraft.aliments[_dModifIndex].quantite : '';
   const aDetail = a.sucres !== null; // base coach = pas de détail sucres/fibres/AGS
   return `
-    <div style="font-size:11px;font-weight:600;color:#555e7a;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Ajouter</div>
+    <div style="font-size:11px;font-weight:600;color:#555e7a;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">${enEdition ? 'Modifier' : 'Ajouter'}</div>
     <div style="font-size:18px;font-weight:700;color:#f0f2ff;margin-bottom:16px;">${esc(a.nom)}</div>
     <div style="margin-bottom:16px;">
       <div style="font-size:11px;color:#8892a4;margin-bottom:6px;">QUANTITÉ (g)</div>
-      <input id="dAjoutQte" type="text" inputmode="numeric" placeholder="ex: 100" oninput="_majPreviewAjout()"
+      <input id="dAjoutQte" type="text" inputmode="numeric" placeholder="ex: 100" value="${qteInitiale}" oninput="_majPreviewAjout()"
         style="width:100%;padding:12px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:10px;font-size:16px;box-sizing:border-box;">
     </div>
     <div id="dAjoutPreview" style="display:flex;justify-content:space-around;text-align:center;padding:12px 0;background:#0f1117;border-radius:10px;">
@@ -810,8 +932,9 @@ function renderModalAjoutQuantite() {
       <div><span style="font-size:14px;font-weight:600;color:#D85A30;">0</span><div class="macro-label">LIP</div></div>
     </div>
     <div id="dAjoutPreviewDetail" style="font-size:11px;color:var(--muted);text-align:center;margin:8px 0 20px;">${aDetail ? 'dont sucres <span id="dPrevSucres">0</span>g · fibres <span id="dPrevFibres">0</span>g · dont AGS <span id="dPrevAgs">0</span>g' : ''}</div>
-    <button onclick="_guardAction(confirmerAjoutAliment)" style="width:100%;padding:14px;background:linear-gradient(135deg,#a78bfa,#6d3fd6);border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">Ajouter</button>
-    <button onclick="_dAjoutEtape='recherche';_afficherModalAjout(false);" style="width:100%;margin-top:8px;padding:12px;background:#2d3142;border:none;border-radius:12px;color:#8892a4;font-size:14px;cursor:pointer;">‹ Retour</button>`;
+    <button onclick="_guardAction(confirmerAjoutAliment, this)" style="width:100%;padding:14px;background:linear-gradient(135deg,#a78bfa,#6d3fd6);border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">${enEdition ? 'Enregistrer' : 'Ajouter'}</button>
+    ${enEdition ? `<button onclick="_guardAction(supprimerAlimentDraftDepuisModal, this)" style="width:100%;margin-top:8px;padding:12px;background:transparent;border:none;color:#e05252;font-size:14px;cursor:pointer;">Supprimer cet aliment</button>` : ''}
+    <button onclick="_dAjoutEtape='recherche';_dModifIndex=null;_afficherModalAjout(false);" style="width:100%;margin-top:8px;padding:12px;background:#2d3142;border:none;border-radius:12px;color:#8892a4;font-size:14px;cursor:pointer;">‹ Retour</button>`;
 }
 
 function _majPreviewAjout() {
@@ -831,10 +954,19 @@ function confirmerAjoutAliment() {
   const a = _dAjoutSelection;
   const qte = parseFloat((document.getElementById('dAjoutQte')||{}).value) || 0;
   if (!a || qte <= 0 || !_dMenuDraft) return;
-  _dMenuDraft.aliments.push({
+  const item = {
     nom: a.nom, quantite: qte, kcal: a.kcal*qte, prot: a.prot*qte, glu: a.glu*qte,
     sucres: (a.sucres||0)*qte, fibres: (a.fibres||0)*qte, lip: a.lip*qte, ags: (a.ags||0)*qte
-  });
+  };
+  if (_dModifIndex != null) { _dMenuDraft.aliments[_dModifIndex] = item; _dModifIndex = null; }
+  else { _dMenuDraft.aliments.push(item); }
+  const modal = document.getElementById('modalAjoutAliment');
+  if (modal) modal.remove();
+  setPage('diete');
+}
+
+function supprimerAlimentDraftDepuisModal() {
+  if (_dModifIndex != null) { _dMenuDraft.aliments.splice(_dModifIndex, 1); _dModifIndex = null; }
   const modal = document.getElementById('modalAjoutAliment');
   if (modal) modal.remove();
   setPage('diete');
@@ -867,7 +999,7 @@ function renderModalAjoutCreation() {
     </div>
     <div style="font-size:11px;color:#555e7a;margin-bottom:12px;">Sucres, AGS et fibres sont optionnels.</div>
     <div id="dCreaErr" style="display:none;font-size:12px;color:#e05252;margin-bottom:12px;"></div>
-    <button onclick="_guardAction(confirmerCreationAliment)" style="width:100%;padding:14px;background:linear-gradient(135deg,#a78bfa,#6d3fd6);border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">Créer et ajouter</button>
+    <button onclick="_guardAction(confirmerCreationAliment, this)" style="width:100%;padding:14px;background:linear-gradient(135deg,#a78bfa,#6d3fd6);border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">Créer et ajouter</button>
     <button onclick="_dAjoutEtape='recherche';_afficherModalAjout(false);" style="width:100%;margin-top:8px;padding:12px;background:#2d3142;border:none;border-radius:12px;color:#8892a4;font-size:14px;cursor:pointer;">‹ Retour</button>`;
 }
 
@@ -925,6 +1057,7 @@ function _afficherModalAjout(loading) {
   </div>`;
   document.body.appendChild(modal);
   modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  if (!loading && _dAjoutEtape === 'quantite') _majPreviewAjout(); // initialise l'aperçu (utile surtout en édition, quantité déjà pré-remplie)
 }
 
 // Cale le bandeau de totaux (sticky) juste sous le header (sticky lui aussi,
