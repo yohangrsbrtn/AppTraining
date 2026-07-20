@@ -13,7 +13,7 @@ let _dMenuDraft  = null; // { nom, aliments: [] } en cours de construction
 // ── Mon journal (jours perso, jusqu'à 7 repas, chacun = repas coach ou menu) ──
 let _dJournal             = null; // null = jamais chargé, sinon liste brute de slots
 let _dJournalDateOuverte  = '';   // date (dd/MM/yyyy) du jour ouvert, '' = liste des jours
-let _dJournalAjoutEtape   = null; // null | 'choix' | 'coach-dietes' | 'coach-repas' | 'menu'
+let _dJournalAjoutEtape   = null; // null | 'choix' | 'coach-dietes' | 'coach-repas' | 'menu' | 'compose'
 let _dJournalDieteChoisie = null; // { ligne, col, nom, repas } — diète en cours de parcours
 let _dDieteDetailCache    = {};   // "ligne|col" -> détail chargerDieteParPosition (résolution des slots coach)
 
@@ -22,6 +22,18 @@ let _dBaseAliments          = null;
 let _dAjoutEtape            = 'recherche'; // 'recherche' | 'quantite' | 'creation'
 let _dAjoutSelection        = null;
 let _dCreationNomPrerempli  = '';
+
+// Garde-fou anti double-tap : un bouton "Créer"/"Ajouter"/"Enregistrer" tapé deux fois
+// rapidement (avant la fin de l'appel réseau précédent) créait autant de lignes en
+// double côté serveur (bug réel constaté sur la création d'aliment). Tous les boutons
+// d'action de cette page passent par _guardAction() au lieu d'appeler la fonction
+// directement, pour n'exécuter qu'un seul appel à la fois.
+let _dActionEnCours = false;
+async function _guardAction(fn) {
+  if (_dActionEnCours) return;
+  _dActionEnCours = true;
+  try { await fn(); } finally { _dActionEnCours = false; }
+}
 
 async function loadDiete() {
   if (_pf.diete) {
@@ -223,7 +235,7 @@ function renderDieteMenus() {
     return `<div class="card">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
         <div style="font-size:15px;font-weight:700;">${esc(m.nom)}</div>
-        <button onclick="supprimerMenuClient('${m.menuId}')" style="background:transparent;border:none;color:#8892a4;font-size:16px;cursor:pointer;line-height:1;">✕</button>
+        <button onclick="_guardAction(() => supprimerMenuClient('${m.menuId}'))" style="background:transparent;border:none;color:#8892a4;font-size:16px;cursor:pointer;line-height:1;">✕</button>
       </div>
       <div style="font-size:12px;color:var(--muted);margin:4px 0 10px;">${m.aliments.length} aliment${m.aliments.length>1?'s':''}</div>
       <div style="display:flex;justify-content:space-around;text-align:center;padding-top:10px;border-top:1px solid var(--border);">
@@ -300,7 +312,7 @@ function renderDieteMenuCreation() {
         </div>` : ''}
         <button onclick="ouvrirAjoutAliment()" style="width:100%;margin-top:${d.aliments.length?'12px':'8px'};padding:12px;background:#2d3142;border:none;border-radius:10px;color:#a78bfa;font-size:14px;font-weight:700;cursor:pointer;">+ Ajouter un aliment</button>
       </div>
-      <button onclick="confirmerCreationMenu()" style="width:100%;margin-top:12px;padding:14px;background:linear-gradient(135deg,#a78bfa,#6d3fd6);border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">Enregistrer le menu</button>
+      <button onclick="_guardAction(confirmerCreationMenu)" style="width:100%;margin-top:12px;padding:14px;background:linear-gradient(135deg,#a78bfa,#6d3fd6);border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">Enregistrer le menu</button>
     </div>
     ${renderNavBar('diete')}
   </div>`;
@@ -329,6 +341,7 @@ function _joursJournal() {
 }
 
 function renderDieteJournal() {
+  if (_dJournalAjoutEtape === 'compose') return renderJournalCompose();
   if (_dJournalDateOuverte) return renderDieteJournalJour();
   const jours = _joursJournal();
   const rows = jours.map(j => `
@@ -411,7 +424,7 @@ function renderDieteJournalJour() {
           <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">Repas ${i+1}</div>
           <div style="font-size:15px;font-weight:700;margin-top:2px;">${esc(s.label)}</div>
         </div>
-        <button onclick="supprimerSlotJournalClient(${s.ligne})" style="background:transparent;border:none;color:#8892a4;font-size:16px;cursor:pointer;line-height:1;">✕</button>
+        <button onclick="_guardAction(() => supprimerSlotJournalClient(${s.ligne}))" style="background:transparent;border:none;color:#8892a4;font-size:16px;cursor:pointer;line-height:1;">✕</button>
       </div>
       ${rendreCorpsRepas({ aliments })}
     </div>`;
@@ -442,6 +455,7 @@ function renderJournalAjoutSlot() {
       <div style="font-size:13px;color:var(--muted);margin-bottom:10px;">Choisis la source du repas</div>
       <button onclick="_dJournalAjoutEtape='coach-dietes';setPage('diete')" style="width:100%;padding:12px;background:#2d3142;border:none;border-radius:10px;color:#e8eaf0;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:8px;">📋 Un repas de ma diète</button>
       <button onclick="_dJournalAjoutEtape='menu';setPage('diete')" style="width:100%;padding:12px;background:#2d3142;border:none;border-radius:10px;color:#e8eaf0;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:8px;">🍽️ Un de mes menus</button>
+      <button onclick="ouvrirComposeJournal()" style="width:100%;padding:12px;background:#2d3142;border:none;border-radius:10px;color:#e8eaf0;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:8px;">🥗 Composer avec des aliments</button>
       <button onclick="_dJournalAjoutEtape=null;setPage('diete')" style="width:100%;padding:10px;background:transparent;border:none;color:#8892a4;font-size:13px;cursor:pointer;">Annuler</button>
     </div>`;
   }
@@ -460,7 +474,7 @@ function renderJournalAjoutSlot() {
     const dc = _dJournalDieteChoisie;
     const repasList = (dc && dc.repas) || [];
     const rows = repasList.map((r, idx) => `
-      <div class="diete-item" onclick="ajouterSlotCoach(${idx})">
+      <div class="diete-item" onclick="_guardAction(() => ajouterSlotCoach(${idx}))">
         <div class="diete-bar"></div><span style="padding-left:8px;font-size:14px;font-weight:600;">${esc(r.nom)}</span><div class="diete-arrow">›</div>
       </div>`).join('');
     return `<div class="card">
@@ -471,7 +485,7 @@ function renderJournalAjoutSlot() {
   }
   if (_dJournalAjoutEtape === 'menu') {
     const rows = (_dMenus||[]).map(m => `
-      <div class="diete-item" onclick="ajouterSlotMenu('${m.menuId}')">
+      <div class="diete-item" onclick="_guardAction(() => ajouterSlotMenu('${m.menuId}'))">
         <div class="diete-bar"></div><span style="padding-left:8px;font-size:14px;font-weight:600;">${esc(m.nom)}</span><div class="diete-arrow">›</div>
       </div>`).join('');
     return `<div class="card">
@@ -481,6 +495,74 @@ function renderJournalAjoutSlot() {
     </div>`;
   }
   return `<button onclick="_dJournalAjoutEtape='choix';setPage('diete')" style="width:100%;padding:14px;background:linear-gradient(135deg,#a78bfa,#6d3fd6);border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">+ Ajouter un repas</button>`;
+}
+
+// Compose un repas à la volée pour un slot du journal (plusieurs aliments de la
+// base coach+communauté, ajoutés un par un) sans passer par la création préalable
+// d'un menu dans la bibliothèque. Réutilise creerMenu() en coulisses (même stockage
+// que "Mes menus", auto-nommé si le client ne donne pas de nom) pour ne pas dupliquer
+// la logique de résolution des slots — seul le nom par défaut change.
+function ouvrirComposeJournal() {
+  _dMenuDraft = { nom: '', aliments: [] };
+  _dJournalAjoutEtape = 'compose';
+  setPage('diete');
+}
+
+function annulerComposeJournal() {
+  _dMenuDraft = null;
+  _dJournalAjoutEtape = 'choix';
+  setPage('diete');
+}
+
+function renderJournalCompose() {
+  const d = _dMenuDraft;
+  const s = _sommeAliments(d.aliments);
+  const lignes = d.aliments.map((a, i) => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">
+      <div style="min-width:0;">
+        <div style="font-size:14px;">${esc(a.nom)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:1px;">${a.quantite}g · ${Math.round(a.kcal)} kcal</div>
+      </div>
+      <button onclick="retirerAlimentDraft(${i})" style="background:transparent;border:none;color:#8892a4;font-size:16px;padding:4px 8px;cursor:pointer;line-height:1;">✕</button>
+    </div>`).join('');
+
+  return `<div id="app">
+    ${renderHeader('Composer un repas', _dJournalDateOuverte, false)}
+    <div class="page">
+      <button class="btn-secondary" onclick="annulerComposeJournal()" style="margin-bottom:12px;">← Annuler</button>
+      <div class="card">
+        <div style="font-size:11px;color:#8892a4;margin-bottom:6px;">NOM DU REPAS (optionnel)</div>
+        <input id="dComposeNom" type="text" value="${esc(d.nom)}" placeholder="ex: Repas libre" oninput="_dMenuDraft.nom=this.value"
+          style="width:100%;padding:12px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:10px;font-size:16px;box-sizing:border-box;margin-bottom:14px;">
+        ${d.aliments.length ? lignes : '<div style="font-size:13px;color:var(--muted);text-align:center;padding:8px 0;">Aucun aliment ajouté.</div>'}
+        ${d.aliments.length ? `<div style="display:flex;justify-content:space-around;text-align:center;margin-top:10px;padding-top:10px;border-top:1px solid #a78bfa;">
+          <div><span style="font-size:14px;font-weight:600;">${Math.round(s.cals)}</span><div class="macro-label">KCAL</div></div>
+          <div><span style="font-size:14px;font-weight:600;color:#378ADD;">${Math.round(s.prot)}</span><div class="macro-label">PROT</div></div>
+          <div><span style="font-size:14px;font-weight:600;color:var(--green);">${Math.round(s.glu)}</span><div class="macro-label">GLU</div></div>
+          <div><span style="font-size:14px;font-weight:600;color:#D85A30;">${Math.round(s.lip)}</span><div class="macro-label">LIP</div></div>
+        </div>` : ''}
+        <button onclick="ouvrirAjoutAliment()" style="width:100%;margin-top:${d.aliments.length?'12px':'8px'};padding:12px;background:#2d3142;border:none;border-radius:10px;color:#a78bfa;font-size:14px;font-weight:700;cursor:pointer;">+ Ajouter un aliment</button>
+      </div>
+      <button onclick="_guardAction(confirmerComposeJournal)" style="width:100%;margin-top:12px;padding:14px;background:linear-gradient(135deg,#a78bfa,#6d3fd6);border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">Ajouter au journal</button>
+    </div>
+    ${renderNavBar('diete')}
+  </div>`;
+}
+
+async function confirmerComposeJournal() {
+  if (!_dMenuDraft.aliments.length) { showToast('Ajoute au moins un aliment.', '#c0392b'); return; }
+  const nom = (document.getElementById('dComposeNom').value || '').trim() || ('Repas du ' + _dJournalDateOuverte);
+  try {
+    const res = await api('creerMenu', { nom, aliments: _dMenuDraft.aliments });
+    if (!res || !res.ok) { showToast('Erreur lors de la création.', '#c0392b'); return; }
+    const res2 = await api('ajouterSlotJournal', { date: _dJournalDateOuverte, type: 'menu', ref: res.menuId, label: nom });
+    if (!res2 || !res2.ok) { showToast(res2 && res2.erreur === 'jour_complet' ? 'Cette journée compte déjà 7 repas.' : 'Erreur.', '#c0392b'); return; }
+    _dMenus = await api('listerMenus');
+    _dJournal = await api('listerJournal');
+    _dMenuDraft = null;
+    _dJournalAjoutEtape = null;
+    setPage('diete');
+  } catch(e) { showToast('Erreur : ' + e.message, '#c0392b'); }
 }
 
 async function choisirDieteJournal(ligne, col, nom) {
@@ -612,7 +694,7 @@ function renderModalAjoutQuantite() {
       <div><span style="font-size:14px;font-weight:600;color:#D85A30;">0</span><div class="macro-label">LIP</div></div>
     </div>
     <div id="dAjoutPreviewDetail" style="font-size:11px;color:var(--muted);text-align:center;margin:8px 0 20px;">${aDetail ? 'dont sucres <span id="dPrevSucres">0</span>g · fibres <span id="dPrevFibres">0</span>g · dont AGS <span id="dPrevAgs">0</span>g' : ''}</div>
-    <button onclick="confirmerAjoutAliment()" style="width:100%;padding:14px;background:linear-gradient(135deg,#a78bfa,#6d3fd6);border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">Ajouter</button>
+    <button onclick="_guardAction(confirmerAjoutAliment)" style="width:100%;padding:14px;background:linear-gradient(135deg,#a78bfa,#6d3fd6);border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">Ajouter</button>
     <button onclick="_dAjoutEtape='recherche';_afficherModalAjout(false);" style="width:100%;margin-top:8px;padding:12px;background:#2d3142;border:none;border-radius:12px;color:#8892a4;font-size:14px;cursor:pointer;">‹ Retour</button>`;
 }
 
@@ -669,7 +751,7 @@ function renderModalAjoutCreation() {
     </div>
     <div style="font-size:11px;color:#555e7a;margin-bottom:12px;">Sucres, AGS et fibres sont optionnels.</div>
     <div id="dCreaErr" style="display:none;font-size:12px;color:#e05252;margin-bottom:12px;"></div>
-    <button onclick="confirmerCreationAliment()" style="width:100%;padding:14px;background:linear-gradient(135deg,#a78bfa,#6d3fd6);border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">Créer et ajouter</button>
+    <button onclick="_guardAction(confirmerCreationAliment)" style="width:100%;padding:14px;background:linear-gradient(135deg,#a78bfa,#6d3fd6);border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">Créer et ajouter</button>
     <button onclick="_dAjoutEtape='recherche';_afficherModalAjout(false);" style="width:100%;margin-top:8px;padding:12px;background:#2d3142;border:none;border-radius:12px;color:#8892a4;font-size:14px;cursor:pointer;">‹ Retour</button>`;
 }
 
