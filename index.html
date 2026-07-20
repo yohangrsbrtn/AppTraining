@@ -243,6 +243,8 @@ function render() {
       if (_dSubPage === 'detail') {
         initDieteSliders((_dDetail && _dDetail.repas || []).length);
         initDieteStickyMacros();
+      } else if (_dSubPage === 'journal' && _dJournalDateOuverte) {
+        initDieteStickyMacros();
       }
       break;
     case 'mensurations':

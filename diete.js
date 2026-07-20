@@ -1,15 +1,27 @@
 // ── Diète page ────────────────────────────────────────────────────────
 
-let _dSubPage = 'list'; // 'list' | 'detail'
+let _dSubPage = 'list'; // 'list' | 'detail' | 'menus' | 'journal'
 let _dDietes  = [];
 let _dDetail  = null;
 let _dNom     = '';
 
-// ── Ajouts libres (aliments en plus du plan, base coach + communauté) ───
-let _dAjoutsLibres     = [];   // ajouts déjà enregistrés pour ce client
-let _dBaseAliments     = null; // { coach:[...], communaute:[...] } — chargée une fois, filtrée côté client
-let _dAjoutEtape       = 'recherche'; // 'recherche' | 'quantite' | 'creation'
-let _dAjoutSelection   = null; // aliment choisi en attente de quantité
+// ── Mes menus (aliments base coach + communauté, combinés en recettes perso) ──
+let _dMenus      = null; // null = jamais chargé
+let _dMenuVue    = 'liste'; // 'liste' | 'creation'
+let _dMenuDraft  = null; // { nom, aliments: [] } en cours de construction
+
+// ── Mon journal (jours perso, jusqu'à 7 repas, chacun = repas coach ou menu) ──
+let _dJournal             = null; // null = jamais chargé, sinon liste brute de slots
+let _dJournalDateOuverte  = '';   // date (dd/MM/yyyy) du jour ouvert, '' = liste des jours
+let _dJournalAjoutEtape   = null; // null | 'choix' | 'coach-dietes' | 'coach-repas' | 'menu'
+let _dJournalDieteChoisie = null; // { ligne, col, nom, repas } — diète en cours de parcours
+let _dDieteDetailCache    = {};   // "ligne|col" -> détail chargerDieteParPosition (résolution des slots coach)
+
+// ── Modale de recherche/ajout/création d'aliment (alimente _dMenuDraft) ──────
+let _dBaseAliments          = null;
+let _dAjoutEtape            = 'recherche'; // 'recherche' | 'quantite' | 'creation'
+let _dAjoutSelection        = null;
+let _dCreationNomPrerempli  = '';
 
 async function loadDiete() {
   if (_pf.diete) {
@@ -33,15 +45,25 @@ async function ouvrirDiete(ligne, col, nom) {
   _dNom = nom;
   setPage('diete-loading');
   try {
-    const [detail, ajouts] = await Promise.all([
-      api('chargerDieteParPosition', { ligneTitre: ligne, colTitre: col }),
-      api('listerAjoutsLibres').catch(() => [])
-    ]);
-    _dDetail  = detail;
-    _dAjoutsLibres = ajouts || [];
+    _dDetail = await api('chargerDieteParPosition', { ligneTitre: ligne, colTitre: col });
     _dSubPage = 'detail';
     setPage('diete');
   } catch(e) { setPage('diete'); }
+}
+
+async function switchDieteTab(tab) {
+  _dSubPage = tab;
+  if (tab === 'menus') _dMenuVue = 'liste';
+  if (tab === 'journal') _dJournalAjoutEtape = null;
+  const chargerMenus   = tab === 'menus'   && _dMenus   === null;
+  const chargerJournal = tab === 'journal' && _dJournal === null;
+  const chargerMenusPourJournal = tab === 'journal' && _dMenus === null;
+  if (chargerMenus || chargerJournal || chargerMenusPourJournal) {
+    setPage('diete-loading');
+    if (chargerMenus || chargerMenusPourJournal) _dMenus = await api('listerMenus').catch(() => []);
+    if (chargerJournal) _dJournal = await api('listerJournal').catch(() => []);
+  }
+  setPage('diete');
 }
 
 // ── Render ────────────────────────────────────────────────────────────
@@ -51,28 +73,33 @@ function renderDietePage() {
     return `<div id="app">${renderHeader('Ma Diète','',false)}<div class="page">${renderSpinner()}</div>${renderNavBar('diete')}</div>`;
   }
   if (_dSubPage === 'detail' && _dDetail) return renderDieteDetail();
+  if (_dSubPage === 'menus') return renderDieteMenus();
+  if (_dSubPage === 'journal') return renderDieteJournal();
   return renderDieteList();
 }
 
-function renderDieteList() {
-  if (!_dDietes || _dDietes.length === 0) {
-    return `<div id="app">
-      ${renderHeader('Ma Diète', '', false)}
-      <div class="page"><div class="empty"><div class="empty-icon">🥗</div><div class="empty-text">Aucune diète trouvée.</div></div></div>
-      ${renderNavBar('diete')}
-    </div>`;
-  }
+function renderDieteTabs(actif) {
+  const tabs = [['list','Diètes'], ['menus','Mes menus'], ['journal','Mon journal']];
+  return `<div style="display:flex;gap:6px;padding:0 16px 12px;">
+    ${tabs.map(([key,label]) => `
+      <button onclick="switchDieteTab('${key}')" style="flex:1;padding:9px 4px;border-radius:10px;border:1px solid ${actif===key?'#a78bfa':'var(--border)'};background:${actif===key?'#a78bfa22':'transparent'};color:${actif===key?'#a78bfa':'var(--muted)'};font-size:12px;font-weight:700;cursor:pointer;">${label}</button>`).join('')}
+  </div>`;
+}
 
-  const rows = _dDietes.map(d => `
-    <div class="diete-item" onclick="ouvrirDiete(${d.ligne}, ${d.col}, '${(d.nom||'').replace(/'/g,"\\'")}')">
-      <div class="diete-bar"></div>
-      <span style="padding-left:8px;font-size:15px;font-weight:700;">${esc(d.nom)}</span>
-      <div class="diete-arrow">›</div>
-    </div>`).join('');
+function renderDieteList() {
+  const body = (!_dDietes || _dDietes.length === 0)
+    ? `<div class="empty"><div class="empty-icon">🥗</div><div class="empty-text">Aucune diète trouvée.</div></div>`
+    : _dDietes.map(d => `
+      <div class="diete-item" onclick="ouvrirDiete(${d.ligne}, ${d.col}, '${(d.nom||'').replace(/'/g,"\\'")}')">
+        <div class="diete-bar"></div>
+        <span style="padding-left:8px;font-size:15px;font-weight:700;">${esc(d.nom)}</span>
+        <div class="diete-arrow">›</div>
+      </div>`).join('');
 
   return `<div id="app">
-    ${renderHeader('Ma Diète', 'Sélectionne ton type de journée', false)}
-    <div class="page">${rows}</div>
+    ${renderHeader('Ma Diète', '', false)}
+    ${renderDieteTabs('list')}
+    <div class="page">${body}</div>
     ${renderNavBar('diete')}
   </div>`;
 }
@@ -86,7 +113,8 @@ let _dCurrentOpt   = [];
 function _sommeAliments(aliments) {
   let cals = 0, prot = 0, glu = 0, lip = 0;
   (aliments || []).forEach(a => {
-    cals += a.cals || 0; prot += a.prot || 0;
+    cals += a.cals != null ? a.cals : (a.kcal || 0);
+    prot += a.prot || 0;
     glu  += a.glu  || 0; lip  += a.lip  || 0;
   });
   return { cals, prot, glu, lip };
@@ -157,56 +185,351 @@ function renderDieteDetail() {
     <div class="page">
       <button class="btn-secondary" onclick="loadDiete()" style="margin-bottom:12px;">← Retour</button>
       ${repasHtml}
-      ${renderAjoutsLibres()}
     </div>
     ${renderNavBar('diete')}
   </div>`;
 }
 
-function _sommeAjoutsLibres() {
-  let cals = 0, prot = 0, glu = 0, lip = 0;
-  _dAjoutsLibres.forEach(a => { cals += a.kcal||0; prot += a.prot||0; glu += a.glu||0; lip += a.lip||0; });
-  return { cals, prot, glu, lip };
+function rendreCorpsRepas(r) {
+  let sCals = 0, sProt = 0, sGlu = 0, sLip = 0;
+  (r.aliments || []).forEach(a => {
+    const cals = a.cals != null ? a.cals : (a.kcal || 0);
+    sCals += cals; sProt += a.prot || 0;
+    sGlu  += a.glu  || 0; sLip += a.lip || 0;
+  });
+
+  const aliments = (r.aliments || []).map(a => `
+    <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);">
+      <div style="font-size:14px;">${esc(a.nom)}${a.modifie ? `<span style="display:inline-block;font-size:8px;font-weight:700;color:#f59e0b;background:#f59e0b18;border:1px solid #f59e0b44;border-radius:3px;padding:1px 4px;margin-left:5px;vertical-align:middle;">modifié</span>` : ''}</div>
+      <div style="font-size:13px;color:var(--muted);white-space:nowrap;margin-left:10px;">${a.qte != null ? a.qte : Math.round(a.quantite||0)}${a.unite ? ' ' + a.unite : 'g'}</div>
+    </div>`).join('');
+
+  return `${aliments}
+    <div style="display:flex;justify-content:space-around;text-align:center;margin-top:10px;padding-top:10px;border-top:1px solid #378ADD;">
+      <div><span style="font-size:14px;font-weight:600;">${Math.round(sCals)}</span><div class="macro-label">KCAL</div></div>
+      <div><span style="font-size:14px;font-weight:600;color:#378ADD;">${Math.round(sProt)}</span><div class="macro-label">PROT</div></div>
+      <div><span style="font-size:14px;font-weight:600;color:var(--green);">${Math.round(sGlu)}</span><div class="macro-label">GLU</div></div>
+      <div><span style="font-size:14px;font-weight:600;color:#D85A30;">${Math.round(sLip)}</span><div class="macro-label">LIP</div></div>
+    </div>`;
 }
 
-function renderAjoutsLibres() {
-  const s = _sommeAjoutsLibres();
-  const lignes = _dAjoutsLibres.map(a => `
+// ── Onglet "Mes menus" ───────────────────────────────────────────────────────
+
+function renderDieteMenus() {
+  if (_dMenuVue === 'creation' && _dMenuDraft) return renderDieteMenuCreation();
+  const menus = _dMenus || [];
+  const cards = menus.map(m => {
+    const s = _sommeAliments(m.aliments);
+    return `<div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+        <div style="font-size:15px;font-weight:700;">${esc(m.nom)}</div>
+        <button onclick="supprimerMenuClient('${m.menuId}')" style="background:transparent;border:none;color:#8892a4;font-size:16px;cursor:pointer;line-height:1;">✕</button>
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin:4px 0 10px;">${m.aliments.length} aliment${m.aliments.length>1?'s':''}</div>
+      <div style="display:flex;justify-content:space-around;text-align:center;padding-top:10px;border-top:1px solid var(--border);">
+        <div><span style="font-size:14px;font-weight:600;">${Math.round(s.cals)}</span><div class="macro-label">KCAL</div></div>
+        <div><span style="font-size:14px;font-weight:600;color:#378ADD;">${Math.round(s.prot)}</span><div class="macro-label">PROT</div></div>
+        <div><span style="font-size:14px;font-weight:600;color:var(--green);">${Math.round(s.glu)}</span><div class="macro-label">GLU</div></div>
+        <div><span style="font-size:14px;font-weight:600;color:#D85A30;">${Math.round(s.lip)}</span><div class="macro-label">LIP</div></div>
+      </div>
+    </div>`;
+  }).join('');
+
+  return `<div id="app">
+    ${renderHeader('Ma Diète', '', false)}
+    ${renderDieteTabs('menus')}
+    <div class="page">
+      ${menus.length ? cards : '<div class="empty"><div class="empty-icon">🍽️</div><div class="empty-text">Aucun menu créé pour l\'instant.</div></div>'}
+      <button onclick="ouvrirCreationMenu()" style="width:100%;margin-top:${menus.length?'4px':'0'};padding:14px;background:linear-gradient(135deg,#a78bfa,#6d3fd6);border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">+ Créer un menu</button>
+    </div>
+    ${renderNavBar('diete')}
+  </div>`;
+}
+
+async function supprimerMenuClient(menuId) {
+  try {
+    await api('supprimerMenu', { menuId });
+    _dMenus = await api('listerMenus');
+    setPage('diete');
+  } catch(e) {}
+}
+
+function ouvrirCreationMenu() {
+  _dMenuDraft = { nom: '', aliments: [] };
+  _dMenuVue = 'creation';
+  setPage('diete');
+}
+
+function annulerCreationMenu() {
+  _dMenuDraft = null;
+  _dMenuVue = 'liste';
+  setPage('diete');
+}
+
+function retirerAlimentDraft(i) {
+  _dMenuDraft.aliments.splice(i, 1);
+  setPage('diete');
+}
+
+function renderDieteMenuCreation() {
+  const d = _dMenuDraft;
+  const s = _sommeAliments(d.aliments);
+  const lignes = d.aliments.map((a, i) => `
     <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">
       <div style="min-width:0;">
         <div style="font-size:14px;">${esc(a.nom)}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:1px;">${a.quantite}g · ${Math.round(a.kcal)} kcal</div>
       </div>
-      <button onclick="supprimerAjoutLibreClient(${a.ligne})" style="background:transparent;border:none;color:#8892a4;font-size:16px;padding:4px 8px;cursor:pointer;line-height:1;">✕</button>
+      <button onclick="retirerAlimentDraft(${i})" style="background:transparent;border:none;color:#8892a4;font-size:16px;padding:4px 8px;cursor:pointer;line-height:1;">✕</button>
     </div>`).join('');
 
-  return `
-    <div class="section-title" style="color:var(--muted);">🍽️ Mes ajouts libres</div>
-    <div class="card">
-      ${_dAjoutsLibres.length ? lignes : '<div style="font-size:13px;color:var(--muted);text-align:center;padding:8px 0;">Rien ajouté pour l\'instant.</div>'}
-      ${_dAjoutsLibres.length ? `<div style="display:flex;justify-content:space-around;text-align:center;margin-top:10px;padding-top:10px;border-top:1px solid #a78bfa;">
-        <div><span style="font-size:14px;font-weight:600;">${Math.round(s.cals)}</span><div class="macro-label">KCAL</div></div>
-        <div><span style="font-size:14px;font-weight:600;color:#378ADD;">${Math.round(s.prot)}</span><div class="macro-label">PROT</div></div>
-        <div><span style="font-size:14px;font-weight:600;color:var(--green);">${Math.round(s.glu)}</span><div class="macro-label">GLU</div></div>
-        <div><span style="font-size:14px;font-weight:600;color:#D85A30;">${Math.round(s.lip)}</span><div class="macro-label">LIP</div></div>
-      </div>` : ''}
-      <button onclick="ouvrirAjoutAliment()" style="width:100%;margin-top:${_dAjoutsLibres.length?'12px':'8px'};padding:12px;background:linear-gradient(135deg,#a78bfa,#6d3fd6);border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:pointer;">+ Ajouter un aliment</button>
-    </div>`;
+  return `<div id="app">
+    ${renderHeader('Nouveau menu', '', false)}
+    <div class="page">
+      <button class="btn-secondary" onclick="annulerCreationMenu()" style="margin-bottom:12px;">← Annuler</button>
+      <div class="card">
+        <div style="font-size:11px;color:#8892a4;margin-bottom:6px;">NOM DU MENU</div>
+        <input id="dMenuNom" type="text" value="${esc(d.nom)}" placeholder="ex: Mon petit-déj maison" oninput="_dMenuDraft.nom=this.value"
+          style="width:100%;padding:12px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:10px;font-size:16px;box-sizing:border-box;margin-bottom:14px;">
+        ${d.aliments.length ? lignes : '<div style="font-size:13px;color:var(--muted);text-align:center;padding:8px 0;">Aucun aliment ajouté.</div>'}
+        ${d.aliments.length ? `<div style="display:flex;justify-content:space-around;text-align:center;margin-top:10px;padding-top:10px;border-top:1px solid #a78bfa;">
+          <div><span style="font-size:14px;font-weight:600;">${Math.round(s.cals)}</span><div class="macro-label">KCAL</div></div>
+          <div><span style="font-size:14px;font-weight:600;color:#378ADD;">${Math.round(s.prot)}</span><div class="macro-label">PROT</div></div>
+          <div><span style="font-size:14px;font-weight:600;color:var(--green);">${Math.round(s.glu)}</span><div class="macro-label">GLU</div></div>
+          <div><span style="font-size:14px;font-weight:600;color:#D85A30;">${Math.round(s.lip)}</span><div class="macro-label">LIP</div></div>
+        </div>` : ''}
+        <button onclick="ouvrirAjoutAliment()" style="width:100%;margin-top:${d.aliments.length?'12px':'8px'};padding:12px;background:#2d3142;border:none;border-radius:10px;color:#a78bfa;font-size:14px;font-weight:700;cursor:pointer;">+ Ajouter un aliment</button>
+      </div>
+      <button onclick="confirmerCreationMenu()" style="width:100%;margin-top:12px;padding:14px;background:linear-gradient(135deg,#a78bfa,#6d3fd6);border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">Enregistrer le menu</button>
+    </div>
+    ${renderNavBar('diete')}
+  </div>`;
 }
 
-async function supprimerAjoutLibreClient(ligne) {
+async function confirmerCreationMenu() {
+  const nom = (document.getElementById('dMenuNom').value || '').trim();
+  if (!nom) { showToast('Donne un nom au menu.', '#c0392b'); return; }
+  if (!_dMenuDraft.aliments.length) { showToast('Ajoute au moins un aliment.', '#c0392b'); return; }
   try {
-    await api('supprimerAjoutLibre', { ligne });
-    // Re-fetch plutôt que de filtrer localement : supprimer une ligne décale
-    // les numéros de ligne de tout ce qui suit dans la feuille, un simple
-    // filter() laisserait les autres "ligne" locales périmées.
-    _dAjoutsLibres = await api('listerAjoutsLibres');
+    await api('creerMenu', { nom, aliments: _dMenuDraft.aliments });
+    _dMenus = await api('listerMenus');
+    _dMenuDraft = null;
+    _dMenuVue = 'liste';
+    setPage('diete');
+  } catch(e) { showToast('Erreur : ' + e.message, '#c0392b'); }
+}
+
+// ── Onglet "Mon journal" ─────────────────────────────────────────────────────
+
+function _joursJournal() {
+  const parDate = {};
+  (_dJournal || []).forEach(s => { (parDate[s.date] = parDate[s.date] || []).push(s); });
+  const toKey = d => { const p = (d+'').split('/'); return p.length===3 ? p[2]+p[1].padStart(2,'0')+p[0].padStart(2,'0') : '0'; };
+  return Object.keys(parDate).sort((a,b) => toKey(b).localeCompare(toKey(a))).map(date => ({ date, slots: parDate[date] }));
+}
+
+function renderDieteJournal() {
+  if (_dJournalDateOuverte) return renderDieteJournalJour();
+  const jours = _joursJournal();
+  const rows = jours.map(j => `
+    <div class="diete-item" onclick="ouvrirJourJournal('${j.date}')">
+      <div class="diete-bar"></div>
+      <span style="padding-left:8px;font-size:15px;font-weight:700;">${j.date}</span>
+      <span style="margin-left:auto;margin-right:8px;font-size:12px;color:var(--muted);">${j.slots.length} repas</span>
+      <div class="diete-arrow">›</div>
+    </div>`).join('');
+
+  return `<div id="app">
+    ${renderHeader('Ma Diète', '', false)}
+    ${renderDieteTabs('journal')}
+    <div class="page">
+      <div class="card" style="display:flex;gap:8px;align-items:center;">
+        <input id="dJournalDatePicker" type="date" style="flex:1;padding:10px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:10px;font-size:16px;box-sizing:border-box;">
+        <button onclick="ouvrirJourJournalDepuisPicker()" style="padding:10px 16px;background:linear-gradient(135deg,#a78bfa,#6d3fd6);border:none;border-radius:10px;color:#fff;font-size:14px;font-weight:700;cursor:pointer;white-space:nowrap;">Ouvrir</button>
+      </div>
+      ${jours.length ? rows : '<div class="empty"><div class="empty-icon">📓</div><div class="empty-text">Aucun jour enregistré.</div></div>'}
+    </div>
+    ${renderNavBar('diete')}
+  </div>`;
+}
+
+function ouvrirJourJournalDepuisPicker() {
+  const el = document.getElementById('dJournalDatePicker');
+  if (!el || !el.value) return;
+  const [y,m,d] = el.value.split('-');
+  ouvrirJourJournal(`${d}/${m}/${y}`);
+}
+
+async function ouvrirJourJournal(dateStr) {
+  const slots = (_dJournal || []).filter(s => s.date === dateStr && s.type === 'coach');
+  const refs = [...new Set(slots.map(s => s.ref))].map(ref => ref.split('|'));
+  const aCharger = refs.filter(([l,c]) => !_dDieteDetailCache[l+'|'+c]);
+  if (aCharger.length) {
+    setPage('diete-loading');
+    await Promise.all(aCharger.map(([l,c]) => _resoudreDieteDetail(parseInt(l), parseInt(c))));
+  }
+  _dJournalDateOuverte = dateStr;
+  _dJournalAjoutEtape = null;
+  setPage('diete');
+}
+
+function fermerJourJournal() {
+  _dJournalDateOuverte = '';
+  setPage('diete');
+}
+
+async function _resoudreDieteDetail(ligne, col) {
+  const key = ligne + '|' + col;
+  if (_dDieteDetailCache[key]) return _dDieteDetailCache[key];
+  const d = await api('chargerDieteParPosition', { ligneTitre: ligne, colTitre: col });
+  _dDieteDetailCache[key] = d;
+  return d;
+}
+
+function _resoudreSlot(s) {
+  if (s.type === 'menu') {
+    const m = (_dMenus || []).find(mm => mm.menuId === s.ref);
+    return m ? m.aliments : [];
+  }
+  const [ligne, col, idx] = s.ref.split('|');
+  const detail = _dDieteDetailCache[ligne+'|'+col];
+  const repas = detail && detail.repas && detail.repas[parseInt(idx)];
+  return repas ? repas.aliments : [];
+}
+
+function renderDieteJournalJour() {
+  const date = _dJournalDateOuverte;
+  const slots = (_dJournal || []).filter(s => s.date === date).sort((a,b) => a.ligne - b.ligne);
+  let total = { cals:0, prot:0, glu:0, lip:0 };
+  const cards = slots.map((s, i) => {
+    const aliments = _resoudreSlot(s);
+    const som = _sommeAliments(aliments);
+    total.cals += som.cals; total.prot += som.prot; total.glu += som.glu; total.lip += som.lip;
+    return `<div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px;">
+        <div>
+          <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">Repas ${i+1}</div>
+          <div style="font-size:15px;font-weight:700;margin-top:2px;">${esc(s.label)}</div>
+        </div>
+        <button onclick="supprimerSlotJournalClient(${s.ligne})" style="background:transparent;border:none;color:#8892a4;font-size:16px;cursor:pointer;line-height:1;">✕</button>
+      </div>
+      ${rendreCorpsRepas({ aliments })}
+    </div>`;
+  }).join('');
+
+  return `<div id="app">
+    ${renderHeader(date, 'Mon journal', false)}
+    <div id="dStickyMacros" style="position:sticky;top:0;z-index:90;background:var(--bg);padding:10px 16px;box-shadow:0 8px 12px -6px rgba(0,0,0,.4);">
+      <div class="card" style="display:flex;justify-content:space-around;text-align:center;padding:14px 8px;margin-bottom:0;">
+        <div><div style="font-size:20px;font-weight:700;">${Math.round(total.cals)}</div><div class="macro-label">KCAL</div></div>
+        <div><div style="font-size:20px;font-weight:700;color:#378ADD;">${Math.round(total.prot)}</div><div class="macro-label">PROT</div></div>
+        <div><div style="font-size:20px;font-weight:700;color:var(--green);">${Math.round(total.glu)}</div><div class="macro-label">GLU</div></div>
+        <div><div style="font-size:20px;font-weight:700;color:#D85A30;">${Math.round(total.lip)}</div><div class="macro-label">LIP</div></div>
+      </div>
+    </div>
+    <div class="page">
+      <button class="btn-secondary" onclick="fermerJourJournal()" style="margin-bottom:12px;">← Retour</button>
+      ${cards}
+      ${slots.length < 7 ? renderJournalAjoutSlot() : '<div style="font-size:12px;color:var(--muted);text-align:center;padding:8px 0;">7 repas — journée complète.</div>'}
+    </div>
+    ${renderNavBar('diete')}
+  </div>`;
+}
+
+function renderJournalAjoutSlot() {
+  if (_dJournalAjoutEtape === 'choix') {
+    return `<div class="card">
+      <div style="font-size:13px;color:var(--muted);margin-bottom:10px;">Choisis la source du repas</div>
+      <button onclick="_dJournalAjoutEtape='coach-dietes';setPage('diete')" style="width:100%;padding:12px;background:#2d3142;border:none;border-radius:10px;color:#e8eaf0;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:8px;">📋 Un repas de ma diète</button>
+      <button onclick="_dJournalAjoutEtape='menu';setPage('diete')" style="width:100%;padding:12px;background:#2d3142;border:none;border-radius:10px;color:#e8eaf0;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:8px;">🍽️ Un de mes menus</button>
+      <button onclick="_dJournalAjoutEtape=null;setPage('diete')" style="width:100%;padding:10px;background:transparent;border:none;color:#8892a4;font-size:13px;cursor:pointer;">Annuler</button>
+    </div>`;
+  }
+  if (_dJournalAjoutEtape === 'coach-dietes') {
+    const rows = (_dDietes||[]).map(d => `
+      <div class="diete-item" onclick="choisirDieteJournal(${d.ligne},${d.col},'${(d.nom||'').replace(/'/g,"\\'")}')">
+        <div class="diete-bar"></div><span style="padding-left:8px;font-size:14px;font-weight:600;">${esc(d.nom)}</span><div class="diete-arrow">›</div>
+      </div>`).join('');
+    return `<div class="card">
+      <div style="font-size:13px;color:var(--muted);margin-bottom:10px;">Depuis quelle diète ?</div>
+      ${rows || '<div style="font-size:13px;color:var(--muted);">Aucune diète trouvée.</div>'}
+      <button onclick="_dJournalAjoutEtape='choix';setPage('diete')" style="width:100%;margin-top:10px;padding:10px;background:transparent;border:none;color:#8892a4;font-size:13px;cursor:pointer;">‹ Retour</button>
+    </div>`;
+  }
+  if (_dJournalAjoutEtape === 'coach-repas') {
+    const dc = _dJournalDieteChoisie;
+    const repasList = (dc && dc.repas) || [];
+    const rows = repasList.map((r, idx) => `
+      <div class="diete-item" onclick="ajouterSlotCoach(${idx})">
+        <div class="diete-bar"></div><span style="padding-left:8px;font-size:14px;font-weight:600;">${esc(r.nom)}</span><div class="diete-arrow">›</div>
+      </div>`).join('');
+    return `<div class="card">
+      <div style="font-size:13px;color:var(--muted);margin-bottom:10px;">${esc(dc ? dc.nom : '')} — quel repas ?</div>
+      ${rows || '<div style="font-size:13px;color:var(--muted);">Aucun repas trouvé.</div>'}
+      <button onclick="_dJournalAjoutEtape='coach-dietes';setPage('diete')" style="width:100%;margin-top:10px;padding:10px;background:transparent;border:none;color:#8892a4;font-size:13px;cursor:pointer;">‹ Retour</button>
+    </div>`;
+  }
+  if (_dJournalAjoutEtape === 'menu') {
+    const rows = (_dMenus||[]).map(m => `
+      <div class="diete-item" onclick="ajouterSlotMenu('${m.menuId}')">
+        <div class="diete-bar"></div><span style="padding-left:8px;font-size:14px;font-weight:600;">${esc(m.nom)}</span><div class="diete-arrow">›</div>
+      </div>`).join('');
+    return `<div class="card">
+      <div style="font-size:13px;color:var(--muted);margin-bottom:10px;">Quel menu ?</div>
+      ${rows || '<div style="font-size:13px;color:var(--muted);">Aucun menu créé. Va dans "Mes menus" pour en créer un.</div>'}
+      <button onclick="_dJournalAjoutEtape='choix';setPage('diete')" style="width:100%;margin-top:10px;padding:10px;background:transparent;border:none;color:#8892a4;font-size:13px;cursor:pointer;">‹ Retour</button>
+    </div>`;
+  }
+  return `<button onclick="_dJournalAjoutEtape='choix';setPage('diete')" style="width:100%;padding:14px;background:linear-gradient(135deg,#a78bfa,#6d3fd6);border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">+ Ajouter un repas</button>`;
+}
+
+async function choisirDieteJournal(ligne, col, nom) {
+  setPage('diete-loading');
+  try {
+    const detail = await _resoudreDieteDetail(ligne, col);
+    _dJournalDieteChoisie = { ligne, col, nom, repas: detail.repas || [] };
+    _dJournalAjoutEtape = 'coach-repas';
+  } catch(e) {}
+  setPage('diete');
+}
+
+async function ajouterSlotCoach(idx) {
+  const dc = _dJournalDieteChoisie;
+  const r = dc && dc.repas[idx];
+  if (!r) return;
+  const ref = dc.ligne + '|' + dc.col + '|' + idx;
+  const label = r.nom + ' · ' + dc.nom;
+  try {
+    const res = await api('ajouterSlotJournal', { date: _dJournalDateOuverte, type: 'coach', ref, label });
+    if (!res || !res.ok) { showToast(res && res.erreur === 'jour_complet' ? 'Cette journée compte déjà 7 repas.' : 'Erreur.', '#c0392b'); return; }
+    _dJournal = await api('listerJournal');
+    _dJournalAjoutEtape = null;
+    _dJournalDieteChoisie = null;
+    setPage('diete');
+  } catch(e) { showToast('Erreur : ' + e.message, '#c0392b'); }
+}
+
+async function ajouterSlotMenu(menuId) {
+  const m = (_dMenus||[]).find(mm => mm.menuId === menuId);
+  if (!m) return;
+  try {
+    const res = await api('ajouterSlotJournal', { date: _dJournalDateOuverte, type: 'menu', ref: menuId, label: m.nom });
+    if (!res || !res.ok) { showToast(res && res.erreur === 'jour_complet' ? 'Cette journée compte déjà 7 repas.' : 'Erreur.', '#c0392b'); return; }
+    _dJournal = await api('listerJournal');
+    _dJournalAjoutEtape = null;
+    setPage('diete');
+  } catch(e) { showToast('Erreur : ' + e.message, '#c0392b'); }
+}
+
+async function supprimerSlotJournalClient(ligne) {
+  try {
+    await api('supprimerSlotJournal', { ligne });
+    _dJournal = await api('listerJournal');
     setPage('diete');
   } catch(e) {}
 }
 
-// ── Modale de recherche/ajout/création d'aliment ─────────────────────────
-let _dCreationNomPrerempli = '';
+// ── Modale de recherche/ajout/création d'aliment (alimente _dMenuDraft) ──────
 
 async function ouvrirAjoutAliment() {
   _dAjoutEtape = 'recherche';
@@ -306,18 +629,17 @@ function _majPreviewAjout() {
   }
 }
 
-async function confirmerAjoutAliment() {
+function confirmerAjoutAliment() {
   const a = _dAjoutSelection;
   const qte = parseFloat((document.getElementById('dAjoutQte')||{}).value) || 0;
-  if (!a || qte <= 0) return;
-  try {
-    await api('ajouterAjoutLibre', {
-      nom: a.nom, quantite: qte, kcal: a.kcal*qte, prot: a.prot*qte, glu: a.glu*qte,
-      sucres: (a.sucres||0)*qte, fibres: (a.fibres||0)*qte, lip: a.lip*qte, ags: (a.ags||0)*qte
-    });
-    _dAjoutsLibres = await api('listerAjoutsLibres');
-    setPage('diete');
-  } catch(e) { showToast('Erreur : ' + e.message, '#c0392b'); }
+  if (!a || qte <= 0 || !_dMenuDraft) return;
+  _dMenuDraft.aliments.push({
+    nom: a.nom, quantite: qte, kcal: a.kcal*qte, prot: a.prot*qte, glu: a.glu*qte,
+    sucres: (a.sucres||0)*qte, fibres: (a.fibres||0)*qte, lip: a.lip*qte, ags: (a.ags||0)*qte
+  });
+  const modal = document.getElementById('modalAjoutAliment');
+  if (modal) modal.remove();
+  setPage('diete');
 }
 
 function ouvrirCreationAliment(nomPrerempli) {
@@ -405,28 +727,6 @@ function _afficherModalAjout(loading) {
   </div>`;
   document.body.appendChild(modal);
   modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
-}
-
-function rendreCorpsRepas(r) {
-  let sCals = 0, sProt = 0, sGlu = 0, sLip = 0;
-  (r.aliments || []).forEach(a => {
-    sCals += a.cals || 0; sProt += a.prot || 0;
-    sGlu  += a.glu  || 0; sLip  += a.lip  || 0;
-  });
-
-  const aliments = (r.aliments || []).map(a => `
-    <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);">
-      <div style="font-size:14px;">${esc(a.nom)}${a.modifie ? `<span style="display:inline-block;font-size:8px;font-weight:700;color:#f59e0b;background:#f59e0b18;border:1px solid #f59e0b44;border-radius:3px;padding:1px 4px;margin-left:5px;vertical-align:middle;">modifié</span>` : ''}</div>
-      <div style="font-size:13px;color:var(--muted);white-space:nowrap;margin-left:10px;">${a.qte}${a.unite ? ' ' + a.unite : 'g'}</div>
-    </div>`).join('');
-
-  return `${aliments}
-    <div style="display:flex;justify-content:space-around;text-align:center;margin-top:10px;padding-top:10px;border-top:1px solid #378ADD;">
-      <div><span style="font-size:14px;font-weight:600;">${Math.round(sCals)}</span><div class="macro-label">KCAL</div></div>
-      <div><span style="font-size:14px;font-weight:600;color:#378ADD;">${Math.round(sProt)}</span><div class="macro-label">PROT</div></div>
-      <div><span style="font-size:14px;font-weight:600;color:var(--green);">${Math.round(sGlu)}</span><div class="macro-label">GLU</div></div>
-      <div><span style="font-size:14px;font-weight:600;color:#D85A30;">${Math.round(sLip)}</span><div class="macro-label">LIP</div></div>
-    </div>`;
 }
 
 // Cale le bandeau de totaux (sticky) juste sous le header (sticky lui aussi,
