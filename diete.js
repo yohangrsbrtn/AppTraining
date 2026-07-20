@@ -352,36 +352,20 @@ function retirerAlimentDraft(i) {
   setPage('diete');
 }
 
-// ── Cible optionnelle affichée pendant la construction d'un menu/repas ───────
-// Toujours présente sur _dMenuDraft.cible ({cals,prot,glu,lip}, chaque champ null tant que
-// non renseigné). Pré-remplie automatiquement à l'ouverture de "Composer" depuis un slot du
-// journal qui a déjà une cible de repas (voir ouvrirComposeJournal) ; sinon laissée vide et
-// modifiable à la main — sert juste de repère visuel, jamais envoyée au serveur.
+// ── Cible affichée pendant la construction d'un menu/repas ───────────────────
+// Uniquement en LECTURE SEULE — jamais un champ de saisie. _dMenuDraft.cible n'est
+// renseignée que lorsqu'elle provient réellement du repas correspondant de la diète cible du
+// jour (voir ouvrirComposeJournal/ouvrirModificationSlotJournal) ; sans diète cible pour ce
+// jour (ou depuis "Mes menus", sans lien avec un jour du journal), _dMenuDraft.cible reste à
+// null sur tous les champs et cette section ne s'affiche simplement pas — pas de saisie
+// manuelle possible en remplacement.
 function _cibleActive(cible) {
   return !!cible && (cible.cals != null || cible.prot != null || cible.glu != null || cible.lip != null);
 }
 
-function _setCibleDraft(champ, val) {
-  if (!_dMenuDraft.cible) _dMenuDraft.cible = { cals: null, prot: null, glu: null, lip: null };
-  _dMenuDraft.cible[champ] = val === '' ? null : parseFloat(val);
-  const el = document.getElementById('dCibleComparaison');
-  if (el) el.innerHTML = _renderComparaisonCible();
-}
-
-function _renderCibleInputs() {
-  const c = _dMenuDraft.cible || {};
-  const input = (champ, ph) => `<input type="text" inputmode="decimal" value="${c[champ]!=null?c[champ]:''}" placeholder="${ph}" oninput="_setCibleDraft('${champ}', this.value)"
-    style="width:100%;padding:8px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:8px;font-size:14px;box-sizing:border-box;text-align:center;">`;
-  return `<div style="margin-bottom:14px;">
-    <div style="font-size:11px;color:#8892a4;margin-bottom:6px;">CIBLE (optionnel)</div>
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;">
-      <div>${input('cals','Kcal')}</div>
-      <div>${input('prot','Prot')}</div>
-      <div>${input('glu','Glu')}</div>
-      <div>${input('lip','Lip')}</div>
-    </div>
-    <div id="dCibleComparaison">${_renderComparaisonCible()}</div>
-  </div>`;
+function _renderCibleAffichage() {
+  if (!_cibleActive(_dMenuDraft.cible)) return '';
+  return `<div id="dCibleComparaison" style="margin-bottom:14px;">${_renderComparaisonCible()}</div>`;
 }
 
 function _renderComparaisonCible() {
@@ -389,8 +373,8 @@ function _renderComparaisonCible() {
   if (!_cibleActive(c)) return '';
   const s = _sommeAliments(_dMenuDraft.aliments);
   const val = (actuel, cible) => cible != null ? `${Math.round(actuel)}/${Math.round(cible)}` : `${Math.round(actuel)}`;
-  return `<div style="font-size:11px;color:var(--muted);margin-top:8px;padding-top:8px;border-top:1px solid var(--border);text-align:center;">
-    Cible : ${val(s.cals,c.cals)} kcal · ${val(s.prot,c.prot)}P · ${val(s.glu,c.glu)}G · ${val(s.lip,c.lip)}L
+  return `<div style="font-size:12px;color:var(--muted);padding:10px;background:#0f1117;border-radius:10px;text-align:center;">
+    Cible du repas : ${val(s.cals,c.cals)} kcal · ${val(s.prot,c.prot)}P · ${val(s.glu,c.glu)}G · ${val(s.lip,c.lip)}L
   </div>`;
 }
 
@@ -415,7 +399,7 @@ function renderDieteMenuCreation() {
         <div style="font-size:11px;color:#8892a4;margin-bottom:6px;">NOM DU MENU</div>
         <input id="dMenuNom" type="text" value="${esc(d.nom)}" placeholder="ex: Mon petit-déj maison" oninput="_dMenuDraft.nom=this.value"
           style="width:100%;padding:12px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:10px;font-size:16px;box-sizing:border-box;margin-bottom:14px;">
-        ${_renderCibleInputs()}
+        ${_renderCibleAffichage()}
         ${d.aliments.length ? lignes : '<div style="font-size:13px;color:var(--muted);text-align:center;padding:8px 0;">Aucun aliment ajouté. Tape sur un aliment ajouté pour changer sa quantité.</div>'}
         ${d.aliments.length ? `<div style="display:flex;justify-content:space-around;text-align:center;margin-top:10px;padding-top:10px;border-top:1px solid #a78bfa;">
           <div><span style="font-size:14px;font-weight:600;">${Math.round(s.cals)}</span><div class="macro-label">KCAL</div></div>
@@ -799,7 +783,7 @@ function renderJournalCompose() {
         <div style="font-size:11px;color:#8892a4;margin-bottom:6px;">NOM DU REPAS (optionnel)</div>
         <input id="dComposeNom" type="text" value="${esc(d.nom)}" placeholder="ex: Repas libre" oninput="_dMenuDraft.nom=this.value"
           style="width:100%;padding:12px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:10px;font-size:16px;box-sizing:border-box;margin-bottom:14px;">
-        ${_renderCibleInputs()}
+        ${_renderCibleAffichage()}
         ${d.aliments.length ? lignes : '<div style="font-size:13px;color:var(--muted);text-align:center;padding:8px 0;">Aucun aliment ajouté. Tape sur un aliment ajouté pour changer sa quantité.</div>'}
         ${d.aliments.length ? `<div style="display:flex;justify-content:space-around;text-align:center;margin-top:10px;padding-top:10px;border-top:1px solid #a78bfa;">
           <div><span style="font-size:14px;font-weight:600;">${Math.round(s.cals)}</span><div class="macro-label">KCAL</div></div>
