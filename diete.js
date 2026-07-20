@@ -25,10 +25,15 @@ let _dDieteDetailCache    = {};   // "ligne|col" -> détail chargerDieteParPosit
 
 // ── Modale de recherche/ajout/création d'aliment (alimente _dMenuDraft) ──────
 let _dBaseAliments          = null;
-let _dAjoutEtape            = 'recherche'; // 'recherche' | 'quantite' | 'creation'
+let _dAjoutEtape            = 'recherche'; // 'recherche' | 'quantite' | 'creation' | 'scan'
 let _dAjoutSelection        = null;
 let _dModifIndex            = null; // index dans _dMenuDraft.aliments en cours de modification (null = ajout d'un nouvel aliment)
 let _dCreationNomPrerempli  = '';
+let _dCreationPrefill       = null; // {kcal100,prot100,glu100,sucres100,fibres100,lip100,ags100} posé par un scan avec match Open Food Facts
+let _dCreationCodeBarre     = null; // code-barres scanné en attente de rattachement au prochain aliment créé
+let _dScanInstance          = null; // instance Html5Qrcode active (pour pouvoir l'arrêter proprement)
+let _dScanLibPromise        = null; // promesse de chargement du script CDN html5-qrcode (chargé une seule fois)
+let _dScanTraitementEnCours = false; // verrou anti double-décodage pendant le traitement d'un scan (match local ou fetch OFF)
 
 // Garde-fou anti double-tap : un bouton "Créer"/"Ajouter"/"Enregistrer" tapé deux fois
 // rapidement (avant la fin de l'appel réseau précédent) créait autant de lignes en
@@ -931,7 +936,7 @@ function renderResultatsAliments(query) {
       <div style="font-size:12px;color:var(--muted);white-space:nowrap;margin-left:10px;">${Math.round(a.kcal*100)} kcal/100g</div>
     </div>`;
   }).join('');
-  const creerBtn = `<button onclick="ouvrirCreationAliment('${q.replace(/'/g,"\\'")}')" style="width:100%;margin-top:10px;padding:10px;background:#2d3142;border:none;border-radius:8px;color:#a78bfa;font-size:13px;font-weight:600;cursor:pointer;">+ Créer "${esc(q)}" comme nouvel aliment</button>`;
+  const creerBtn = `<button onclick="_dCreationPrefill=null;_dCreationCodeBarre=null;ouvrirCreationAliment('${q.replace(/'/g,"\\'")}')" style="width:100%;margin-top:10px;padding:10px;background:#2d3142;border:none;border-radius:8px;color:#a78bfa;font-size:13px;font-weight:600;cursor:pointer;">+ Créer "${esc(q)}" comme nouvel aliment</button>`;
   if (results.length === 0) {
     return `<div style="font-size:12px;color:var(--muted);text-align:center;padding:12px 0;">Aucun résultat.</div>${creerBtn}`;
   }
@@ -1025,6 +1030,101 @@ function supprimerAlimentDraftDepuisModal() {
   setPage('diete');
 }
 
+// ── Scan code-barres (Open Food Facts) ────────────────────────────────────────
+// Lib de décodage caméra chargée en lazy (CDN, comme Firebase déjà chargé ailleurs) —
+// iOS Safari n'a pas de BarcodeDetector natif. Si le code-barres correspond déjà à un
+// aliment de la base (coach ou communauté, via son champ codeBarre), on saute directement
+// à la sélection ; sinon on interroge Open Food Facts (CORS ouvert, pas de proxy GAS) pour
+// préremplir le formulaire de création existant — pas d'import en masse, la base communauté
+// grossit organiquement au fil des scans confirmés par les clients.
+async function ouvrirScanCodeBarre() {
+  _dAjoutEtape = 'scan';
+  _dScanTraitementEnCours = false;
+  _afficherModalAjout(false);
+  try {
+    await _chargerLibScan();
+    _demarrerScan();
+  } catch(e) {
+    showToast('Scanner indisponible.', '#c0392b');
+    _dAjoutEtape = 'recherche';
+    _afficherModalAjout(false);
+  }
+}
+
+function _chargerLibScan() {
+  if (window.Html5Qrcode) return Promise.resolve();
+  if (_dScanLibPromise) return _dScanLibPromise;
+  _dScanLibPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js';
+    s.onload = () => resolve();
+    s.onerror = () => { _dScanLibPromise = null; reject(new Error('lib_scan_indisponible')); };
+    document.head.appendChild(s);
+  });
+  return _dScanLibPromise;
+}
+
+function renderModalAjoutScan() {
+  return `
+    <div style="font-size:11px;font-weight:600;color:#555e7a;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;">Scanner un code-barres</div>
+    <div id="dScanViewport" style="width:100%;border-radius:12px;overflow:hidden;background:#000;min-height:260px;"></div>
+    <div style="font-size:12px;color:var(--muted);text-align:center;margin:12px 0;">Vise le code-barres du produit.</div>
+    <button onclick="_dAjoutEtape='recherche';_afficherModalAjout(false);" style="width:100%;padding:12px;background:#2d3142;border:none;border-radius:12px;color:#8892a4;font-size:14px;cursor:pointer;">Annuler</button>`;
+}
+
+function _demarrerScan() {
+  if (_dAjoutEtape !== 'scan') return; // l'utilisateur a déjà quitté l'écran pendant le chargement de la lib
+  const el = document.getElementById('dScanViewport');
+  if (!el || !window.Html5Qrcode) return;
+  _dScanInstance = new Html5Qrcode('dScanViewport');
+  const formats = [Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8, Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E];
+  _dScanInstance.start({ facingMode: 'environment' }, { fps: 10, qrbox: { width: 260, height: 160 }, formatsToSupport: formats }, onScanSuccess)
+    .catch(() => {
+      showToast('Impossible d\'accéder à la caméra.', '#c0392b');
+      _dAjoutEtape = 'recherche';
+      _afficherModalAjout(false);
+    });
+}
+
+async function onScanSuccess(codeBarre) {
+  if (_dAjoutEtape !== 'scan' || _dScanTraitementEnCours) return; // ignore un 2e décodage pendant qu'on traite déjà le premier
+  _dScanTraitementEnCours = true;
+  _arreterScan();
+  const local = _tousLesAliments().find(a => a.codeBarre === codeBarre);
+  if (local) { _dScanTraitementEnCours = false; selectionnerAliment(local.nom, local.source); return; }
+  _afficherModalAjout(true);
+  try {
+    const res = await fetch('https://world.openfoodfacts.org/api/v2/product/' + encodeURIComponent(codeBarre) + '.json?fields=product_name,nutriments');
+    const data = await res.json();
+    if (data && data.status === 1 && data.product) {
+      const n = data.product.nutriments || {};
+      _dCreationPrefill = {
+        kcal100:   Math.round((n['energy-kcal_100g'] || 0) * 10) / 10,
+        prot100:   Math.round((n['proteins_100g'] || 0) * 10) / 10,
+        glu100:    Math.round((n['carbohydrates_100g'] || 0) * 10) / 10,
+        sucres100: Math.round((n['sugars_100g'] || 0) * 10) / 10,
+        fibres100: Math.round((n['fiber_100g'] || 0) * 10) / 10,
+        lip100:    Math.round((n['fat_100g'] || 0) * 10) / 10,
+        ags100:    Math.round((n['saturated-fat_100g'] || 0) * 10) / 10
+      };
+      _dCreationCodeBarre = codeBarre;
+      ouvrirCreationAliment(data.product.product_name || '');
+    } else {
+      _dCreationPrefill = null;
+      _dCreationCodeBarre = codeBarre;
+      showToast('Produit non trouvé, tu peux le créer manuellement.', '#e0a030');
+      ouvrirCreationAliment('');
+    }
+  } catch(e) {
+    _dCreationPrefill = null;
+    _dCreationCodeBarre = codeBarre;
+    showToast('Erreur réseau, tu peux créer l\'aliment manuellement.', '#c0392b');
+    ouvrirCreationAliment('');
+  } finally {
+    _dScanTraitementEnCours = false;
+  }
+}
+
 function ouvrirCreationAliment(nomPrerempli) {
   _dCreationNomPrerempli = nomPrerempli || '';
   _dAjoutEtape = 'creation';
@@ -1032,9 +1132,11 @@ function ouvrirCreationAliment(nomPrerempli) {
 }
 
 function renderModalAjoutCreation() {
+  const pf = _dCreationPrefill || {};
+  const v = n => (pf[n] != null ? pf[n] : '');
   return `
     <div style="font-size:11px;font-weight:600;color:#555e7a;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Nouvel aliment</div>
-    <div style="font-size:13px;color:#8892a4;margin-bottom:16px;line-height:1.5;">Ajouté à la base communautaire, utilisable par tous — visible immédiatement mais marqué "non validé" jusqu'à ce que ton coach le confirme.</div>
+    <div style="font-size:13px;color:#8892a4;margin-bottom:16px;line-height:1.5;">Ajouté à la base communautaire, utilisable par tous — visible immédiatement mais marqué "non validé" jusqu'à ce que ton coach le confirme.${_dCreationCodeBarre ? ' Champs préremplis depuis Open Food Facts, à vérifier avant de valider.' : ''}</div>
     <div style="margin-bottom:12px;">
       <div style="font-size:11px;color:#8892a4;margin-bottom:6px;">NOM</div>
       <input id="dCreaNom" type="text" value="${esc(_dCreationNomPrerempli)}" placeholder="ex: Yaourt grec"
@@ -1042,18 +1144,18 @@ function renderModalAjoutCreation() {
     </div>
     <div style="font-size:11px;color:#8892a4;margin-bottom:6px;">POUR 100g</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
-      <div><div style="font-size:10px;color:#8892a4;margin-bottom:4px;">Kcal</div><input id="dCreaKcal" type="text" inputmode="decimal" placeholder="0" style="width:100%;padding:10px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:8px;font-size:16px;box-sizing:border-box;"></div>
-      <div><div style="font-size:10px;color:#8892a4;margin-bottom:4px;">Protéines (g)</div><input id="dCreaProt" type="text" inputmode="decimal" placeholder="0" style="width:100%;padding:10px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:8px;font-size:16px;box-sizing:border-box;"></div>
-      <div><div style="font-size:10px;color:#8892a4;margin-bottom:4px;">Glucides (g)</div><input id="dCreaGlu" type="text" inputmode="decimal" placeholder="0" style="width:100%;padding:10px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:8px;font-size:16px;box-sizing:border-box;"></div>
-      <div><div style="font-size:10px;color:#8892a4;margin-bottom:4px;">dont Sucres (g)</div><input id="dCreaSucres" type="text" inputmode="decimal" placeholder="0" style="width:100%;padding:10px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:8px;font-size:16px;box-sizing:border-box;"></div>
-      <div><div style="font-size:10px;color:#8892a4;margin-bottom:4px;">Lipides (g)</div><input id="dCreaLip" type="text" inputmode="decimal" placeholder="0" style="width:100%;padding:10px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:8px;font-size:16px;box-sizing:border-box;"></div>
-      <div><div style="font-size:10px;color:#8892a4;margin-bottom:4px;">dont AGS (g)</div><input id="dCreaAgs" type="text" inputmode="decimal" placeholder="0" style="width:100%;padding:10px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:8px;font-size:16px;box-sizing:border-box;"></div>
-      <div style="grid-column:1 / -1;"><div style="font-size:10px;color:#8892a4;margin-bottom:4px;">Fibres (g)</div><input id="dCreaFibres" type="text" inputmode="decimal" placeholder="0" style="width:100%;padding:10px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:8px;font-size:16px;box-sizing:border-box;"></div>
+      <div><div style="font-size:10px;color:#8892a4;margin-bottom:4px;">Kcal</div><input id="dCreaKcal" type="text" inputmode="decimal" placeholder="0" value="${v('kcal100')}" style="width:100%;padding:10px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:8px;font-size:16px;box-sizing:border-box;"></div>
+      <div><div style="font-size:10px;color:#8892a4;margin-bottom:4px;">Protéines (g)</div><input id="dCreaProt" type="text" inputmode="decimal" placeholder="0" value="${v('prot100')}" style="width:100%;padding:10px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:8px;font-size:16px;box-sizing:border-box;"></div>
+      <div><div style="font-size:10px;color:#8892a4;margin-bottom:4px;">Glucides (g)</div><input id="dCreaGlu" type="text" inputmode="decimal" placeholder="0" value="${v('glu100')}" style="width:100%;padding:10px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:8px;font-size:16px;box-sizing:border-box;"></div>
+      <div><div style="font-size:10px;color:#8892a4;margin-bottom:4px;">dont Sucres (g)</div><input id="dCreaSucres" type="text" inputmode="decimal" placeholder="0" value="${v('sucres100')}" style="width:100%;padding:10px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:8px;font-size:16px;box-sizing:border-box;"></div>
+      <div><div style="font-size:10px;color:#8892a4;margin-bottom:4px;">Lipides (g)</div><input id="dCreaLip" type="text" inputmode="decimal" placeholder="0" value="${v('lip100')}" style="width:100%;padding:10px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:8px;font-size:16px;box-sizing:border-box;"></div>
+      <div><div style="font-size:10px;color:#8892a4;margin-bottom:4px;">dont AGS (g)</div><input id="dCreaAgs" type="text" inputmode="decimal" placeholder="0" value="${v('ags100')}" style="width:100%;padding:10px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:8px;font-size:16px;box-sizing:border-box;"></div>
+      <div style="grid-column:1 / -1;"><div style="font-size:10px;color:#8892a4;margin-bottom:4px;">Fibres (g)</div><input id="dCreaFibres" type="text" inputmode="decimal" placeholder="0" value="${v('fibres100')}" style="width:100%;padding:10px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:8px;font-size:16px;box-sizing:border-box;"></div>
     </div>
     <div style="font-size:11px;color:#555e7a;margin-bottom:12px;">Sucres, AGS et fibres sont optionnels.</div>
     <div id="dCreaErr" style="display:none;font-size:12px;color:#e05252;margin-bottom:12px;"></div>
     <button onclick="_guardAction(confirmerCreationAliment, this)" style="width:100%;padding:14px;background:linear-gradient(135deg,#a78bfa,#6d3fd6);border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">Créer et ajouter</button>
-    <button onclick="_dAjoutEtape='recherche';_afficherModalAjout(false);" style="width:100%;margin-top:8px;padding:12px;background:#2d3142;border:none;border-radius:12px;color:#8892a4;font-size:14px;cursor:pointer;">‹ Retour</button>`;
+    <button onclick="_dCreationPrefill=null;_dCreationCodeBarre=null;_dAjoutEtape='recherche';_afficherModalAjout(false);" style="width:100%;margin-top:8px;padding:12px;background:#2d3142;border:none;border-radius:12px;color:#8892a4;font-size:14px;cursor:pointer;">‹ Retour</button>`;
 }
 
 async function confirmerCreationAliment() {
@@ -1073,17 +1175,31 @@ async function confirmerCreationAliment() {
   try {
     const res = await api('ajouterAlimentCommunaute', {
       nom, kcal: kcal100/100, prot: prot100/100, glu: glu100/100,
-      sucres: sucres100/100, fibres: fibres100/100, lip: lip100/100, ags: ags100/100
+      sucres: sucres100/100, fibres: fibres100/100, lip: lip100/100, ags: ags100/100,
+      codeBarre: _dCreationCodeBarre || ''
     });
     if (!res || !res.ok) { errEl.textContent = 'Erreur lors de la création.'; errEl.style.display = 'block'; return; }
     if (_dBaseAliments) _dBaseAliments.communaute.push(res.aliment);
     _dAjoutSelection = res.aliment;
     _dAjoutEtape = 'quantite';
+    _dCreationPrefill = null;
+    _dCreationCodeBarre = null;
     _afficherModalAjout(false);
   } catch(e) { errEl.textContent = 'Erreur : ' + e.message; errEl.style.display = 'block'; }
 }
 
+// Arrête proprement la caméra si un scan est en cours — sans ça le flux vidéo reste actif
+// en arrière-plan quand on quitte l'écran scan (bouton retour, sélection, fermeture modale).
+function _arreterScan() {
+  if (_dScanInstance) {
+    const inst = _dScanInstance;
+    _dScanInstance = null;
+    try { inst.stop().then(() => { try { inst.clear(); } catch(e) {} }).catch(() => {}); } catch(e) {}
+  }
+}
+
 function _afficherModalAjout(loading) {
+  _arreterScan();
   const existant = document.getElementById('modalAjoutAliment');
   if (existant) existant.remove();
   const modal = document.createElement('div');
@@ -1096,11 +1212,14 @@ function _afficherModalAjout(loading) {
     contenu = renderModalAjoutQuantite();
   } else if (_dAjoutEtape === 'creation') {
     contenu = renderModalAjoutCreation();
+  } else if (_dAjoutEtape === 'scan') {
+    contenu = renderModalAjoutScan();
   } else {
     contenu = `
       <div style="font-size:11px;font-weight:600;color:#555e7a;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;">Ajouter un aliment</div>
       <input id="dAjoutRecherche" type="text" placeholder="Chercher un aliment…" oninput="onRechercheAlimentInput(this.value)"
         style="width:100%;padding:12px;background:#0f1117;color:#e8eaf0;border:1px solid #2d3142;border-radius:10px;font-size:16px;box-sizing:border-box;margin-bottom:4px;">
+      <button onclick="ouvrirScanCodeBarre()" style="width:100%;margin-bottom:12px;padding:10px;background:#2d3142;border:none;border-radius:8px;color:#e8eaf0;font-size:13px;font-weight:600;cursor:pointer;">📷 Scanner un code-barres</button>
       <div id="dAjoutResultats" style="max-height:50vh;overflow-y:auto;">${renderResultatsAliments('')}</div>
       <button onclick="document.getElementById('modalAjoutAliment').remove();" style="width:100%;margin-top:12px;padding:12px;background:#2d3142;border:none;border-radius:12px;color:#8892a4;font-size:14px;cursor:pointer;">Fermer</button>`;
   }
@@ -1109,7 +1228,8 @@ function _afficherModalAjout(loading) {
     ${contenu}
   </div>`;
   document.body.appendChild(modal);
-  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  modal.addEventListener('click', e => { if (e.target === modal) { _arreterScan(); modal.remove(); } });
+  if (!loading && _dAjoutEtape === 'scan') _demarrerScan();
   if (!loading && _dAjoutEtape === 'quantite') _majPreviewAjout(); // initialise l'aperçu (utile surtout en édition, quantité déjà pré-remplie)
 }
 
