@@ -95,13 +95,19 @@ async function switchDieteTab(tab) {
   _dSubPage = tab;
   if (tab === 'menus') _dMenuVue = 'liste';
   if (tab === 'journal') _dJournalAjoutEtape = null;
-  const chargerMenus   = tab === 'menus'   && _dMenus   === null;
+  const chargerMenus   = (tab === 'menus' || tab === 'journal') && _dMenus === null;
   const chargerJournal = tab === 'journal' && _dJournal === null;
-  const chargerMenusPourJournal = tab === 'journal' && _dMenus === null;
-  if (chargerMenus || chargerJournal || chargerMenusPourJournal) {
+  if (chargerMenus || chargerJournal) {
     setPage('diete-loading');
-    if (chargerMenus || chargerMenusPourJournal) _dMenus = await api('listerMenus').catch(() => []);
-    if (chargerJournal) _dJournal = await api('listerJournal').catch(() => []);
+    // En parallèle (plus rapide) — et surtout, en cas d'échec réseau on laisse _dMenus/_dJournal
+    // à null plutôt que de les remplacer par [] : un [] silencieux se rend exactement comme
+    // "vraiment vide" (écran "Aucun jour enregistré"/"Aucun menu créé"), ce qui pouvait laisser
+    // croire que rien n'avait été enregistré et pousser à recréer une entrée en double. null
+    // déclenche à la place un écran "Erreur de chargement" avec un vrai bouton Réessayer.
+    const taches = [];
+    if (chargerMenus)   taches.push(api('listerMenus').then(r => { _dMenus = r; }).catch(() => { _dMenus = null; }));
+    if (chargerJournal) taches.push(api('listerJournal').then(r => { _dJournal = r; }).catch(() => { _dJournal = null; }));
+    await Promise.all(taches);
   }
   setPage('diete');
 }
@@ -255,8 +261,25 @@ function rendreCorpsRepas(r) {
 
 // ── Onglet "Mes menus" ───────────────────────────────────────────────────────
 
+// Affiché quand un fetch échoue (switchDieteTab laisse _dMenus/_dJournal à null dans ce cas,
+// au lieu de [] silencieusement) — jamais confondre "erreur réseau" avec "vraiment vide", sinon
+// on laisse croire qu'il n'y a rien alors que les données sont peut-être bien là côté serveur,
+// ce qui pousse les gens à recréer une entrée en double.
+function renderDieteErreurChargement(tab) {
+  return `<div id="app">
+    ${renderHeader('Ma Diète', '', false)}
+    ${renderDieteTabs(tab)}
+    <div class="page">
+      <div class="empty"><div class="empty-icon">⚠️</div><div class="empty-text">Erreur de chargement. Vérifie ta connexion.</div></div>
+      <button onclick="_guardAction(() => switchDieteTab('${tab}'), this)" style="width:100%;padding:14px;background:linear-gradient(135deg,#a78bfa,#6d3fd6);border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">Réessayer</button>
+    </div>
+    ${renderNavBar('diete')}
+  </div>`;
+}
+
 function renderDieteMenus() {
   if (_dMenuVue === 'creation' && _dMenuDraft) return renderDieteMenuCreation();
+  if (_dMenus === null) return renderDieteErreurChargement('menus');
   const menus = _dMenus || [];
   const cards = menus.map(m => {
     const s = _sommeAliments(m.aliments);
@@ -437,6 +460,7 @@ function _joursJournal() {
 function renderDieteJournal() {
   if (_dJournalAjoutEtape === 'compose') return renderJournalCompose();
   if (_dJournalDateOuverte) return renderDieteJournalJour();
+  if (_dJournal === null) return renderDieteErreurChargement('journal');
   const jours = _joursJournal();
   const rows = jours.map(j => `
     <div class="diete-item" onclick="ouvrirJourJournal('${j.date}')">
