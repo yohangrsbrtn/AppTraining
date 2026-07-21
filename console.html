@@ -428,7 +428,7 @@ async function chargerDonnees(){
     api('chargerTousLesLogs').catch(()=>({logs:[]})),
     api('listerAlimentsCommunauteAValider').catch(()=>[]),
   ]);
-  const clients = typeof clientsRaw === 'string' ? JSON.parse(clientsRaw) : clientsRaw;
+  const clients = (typeof clientsRaw === 'string' ? JSON.parse(clientsRaw) : clientsRaw).filter(c => c.id !== 'yohan');
   const retards = await Promise.all(
     clients.map(c => apiAs('verifierRetardBilan', c.id).catch(()=>({enRetard:false})))
   );
