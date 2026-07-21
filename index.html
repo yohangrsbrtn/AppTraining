@@ -1350,7 +1350,13 @@ function goTo(page) {
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 
 if (S.token && S.client) {
-  loadHome();
+  const _viewAsParam = new URLSearchParams(window.location.search).get('viewAs');
+  if (_viewAsParam && S.isCoach) {
+    history.replaceState(null, '', window.location.pathname);
+    enterVueClient(_viewAsParam);
+  } else {
+    loadHome();
+  }
 } else {
   setPage('login');
 }
