@@ -452,11 +452,144 @@ function renderMain(){
   const el = document.getElementById('main');
   if (state.nav === 'dashboard') { renderDashboard(el); return; }
   if (state.nav === 'clients') { renderClientsPage(el); return; }
+  if (state.nav === 'bilans') { renderBilansPage(el); return; }
+  if (state.nav === 'classement') { renderClassementPage(el); return; }
+  if (state.nav === 'base') { renderBasePage(el); return; }
+  if (state.nav === 'protocole') { renderProtocolePage(el); return; }
   const label = NAV.flatMap(g=>g.items).find(i=>i.id===state.nav)?.label || '';
   el.innerHTML = `
     <div class="page-head"><div><div class="eyebrow">Console coach</div><h1>${label}</h1></div></div>
     <div class="empty-panel"><strong>Pas encore construit</strong>
     "${label}" suivra la même grammaire visuelle qu'Accueil/Clients — cartes, tableau filtrable, panneau de détail latéral.</div>`;
+}
+
+// ── Page Bilans ───────────────────────────────────────────────────────
+let bilansFilter = 'attente'; // 'attente' | 'traites' | 'tous'
+function setBilansFilter(f){ bilansFilter = f; renderMain(); }
+function renderBilansPage(el){
+  let list = data.bilansCoach.slice();
+  if (bilansFilter === 'attente') list = list.filter(b=>!b.coachTraite);
+  if (bilansFilter === 'traites') list = list.filter(b=>b.coachTraite);
+  list.sort((a,b)=> (b.ts||'').localeCompare(a.ts||''));
+  el.innerHTML = `
+    <div class="page-head">
+      <div><div class="eyebrow">Console coach</div><h1>Bilans</h1></div>
+      <div class="meta">${list.length} bilan${list.length>1?'s':''}</div>
+    </div>
+    <div class="table-card">
+      <div class="table-toolbar">
+        <div class="title">Bilans envoyés au coach</div>
+        <div class="chip-filter">
+          <button class="${bilansFilter==='attente'?'active':''}" onclick="setBilansFilter('attente')">À traiter</button>
+          <button class="${bilansFilter==='traites'?'active':''}" onclick="setBilansFilter('traites')">Traités</button>
+          <button class="${bilansFilter==='tous'?'active':''}" onclick="setBilansFilter('tous')">Tous</button>
+        </div>
+      </div>
+      <div class="table-scroll"><table class="clients">
+        <thead><tr><th>Client</th><th>Semaine</th><th>Envoyé le</th><th>Statut</th><th></th></tr></thead>
+        <tbody>
+          ${list.map(b => `
+            <tr>
+              <td><div class="cell-name"><div class="mini-avatar">${initials(b.nom)}</div>${esc(b.nom)}</div></td>
+              <td>${esc(b.semaine||'')}</td>
+              <td class="mono" style="color:var(--text-faint);">${esc(b.ts||'')}</td>
+              <td>${b.coachTraite ? `<span class="chip ok"><span class="dot"></span>Traité</span>` : `<span class="chip late"><span class="dot"></span>À traiter</span>`}</td>
+              <td class="row-actions">${b.coachTraite ? '' : `<button class="btn" onclick="marquerTraite('${b.client}','${esc(b.ts)}')">Marquer traité</button>`}</td>
+            </tr>`).join('') || `<tr><td colspan="5" style="text-align:center;color:var(--text-faint);padding:26px;">Aucun bilan ici.</td></tr>`}
+        </tbody>
+      </table></div>
+    </div>`;
+}
+
+// ── Page Classement ───────────────────────────────────────────────────
+function renderClassementPage(el){
+  const list = data.clients.slice().sort((a,b)=> (b.niveau||0)-(a.niveau||0));
+  el.innerHTML = `
+    <div class="page-head">
+      <div><div class="eyebrow">Console coach</div><h1>Classement</h1></div>
+      <div class="meta">${list.length} client${list.length>1?'s':''}</div>
+    </div>
+    <div class="table-card">
+      <div class="table-scroll"><table class="clients">
+        <thead><tr><th>Rang</th><th>Client</th><th>Niveau</th><th>Titre actif</th></tr></thead>
+        <tbody>
+          ${list.map((c,i) => `
+            <tr onclick="openPanel('${c.id}')">
+              <td class="mono">${i+1}</td>
+              <td><div class="cell-name"><div class="mini-avatar">${initials(c.nom)}</div>${esc(c.nom)}</div></td>
+              <td><span class="level-pill">Niv. ${c.niveau||1}</span></td>
+              <td>${esc(c.titreActif||'—')}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table></div>
+    </div>`;
+}
+
+// ── Page Base alimentaire ──────────────────────────────────────────────
+function renderBasePage(el){
+  const list = data.aValider;
+  el.innerHTML = `
+    <div class="page-head">
+      <div><div class="eyebrow">Console coach</div><h1>Base alimentaire</h1></div>
+      <div class="meta">${list.length} en attente</div>
+    </div>
+    ${list.length ? `<div class="dash-grid" style="grid-template-columns:repeat(2,1fr);">
+      ${list.map(a => `
+        <div class="card">
+          <div class="card-head">${iApple()}<span class="t">${esc(a.nom)}</span></div>
+          <div class="panel-body" style="padding-top:0;">
+            <div class="panel-row"><span class="l">Ajouté par</span><span class="v">${esc(a.ajoutePar)}</span></div>
+            <div class="panel-row"><span class="l">Date</span><span class="v mono" style="font-size:11px;">${esc(a.date)}</span></div>
+            <div class="macro-grid" style="margin:10px 0;">
+              <div><div class="n">${Math.round(a.kcal*100)}</div><div class="u">kcal</div></div>
+              <div><div class="n">${Math.round(a.prot*100)}g</div><div class="u">prot</div></div>
+              <div><div class="n">${Math.round(a.glu*100)}g</div><div class="u">gluc</div></div>
+              <div><div class="n">${Math.round(a.lip*100)}g</div><div class="u">lip</div></div>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn primary" style="flex:1;justify-content:center;" onclick="validerAliment(${a.ligne})">Valider</button>
+              <button class="btn" style="flex:1;justify-content:center;color:var(--critical);" onclick="supprimerAliment(${a.ligne})">Supprimer</button>
+            </div>
+          </div>
+        </div>`).join('')}
+    </div>` : `<div class="empty-panel"><strong>Rien à valider</strong>Tous les ajouts communautaires sont à jour.</div>`}`;
+}
+async function validerAliment(ligne){
+  try { await api('validerAlimentCommunaute', { ligne }); data.aValider = data.aValider.filter(a=>a.ligne!==ligne); renderSidebar(); renderMain(); }
+  catch(e) { alert('Erreur : ' + e.message); }
+}
+async function supprimerAliment(ligne){
+  try {
+    await api('supprimerAlimentCommunaute', { ligne });
+    // deleteRow décale les lignes suivantes — refetch plutôt que filtrer localement (piège documenté CLAUDE.md).
+    data.aValider = await api('listerAlimentsCommunauteAValider');
+    renderSidebar(); renderMain();
+  } catch(e) { alert('Erreur : ' + e.message); }
+}
+
+// ── Page Protocole ─────────────────────────────────────────────────────
+function renderProtocolePage(el){
+  const actifs = data.clients.filter(c=>c.chimieActif);
+  el.innerHTML = `
+    <div class="page-head">
+      <div><div class="eyebrow">Console coach</div><h1>Protocole</h1></div>
+      <div class="meta">${actifs.length} actif${actifs.length>1?'s':''}</div>
+    </div>
+    <div class="table-card">
+      <div class="table-toolbar"><div class="title">Clients avec le protocole chimie activé</div></div>
+      <div class="table-scroll"><table class="clients">
+        <thead><tr><th>Client</th><th>Niveau</th><th></th></tr></thead>
+        <tbody>
+          ${actifs.map(c => `
+            <tr>
+              <td><div class="cell-name"><div class="mini-avatar">${initials(c.nom)}</div>${esc(c.nom)}</div></td>
+              <td><span class="level-pill">Niv. ${c.niveau||1}</span></td>
+              <td class="row-actions"><button class="btn" onclick="toggleChimie('${c.id}',true)">Désactiver</button></td>
+            </tr>`).join('') || `<tr><td colspan="3" style="text-align:center;color:var(--text-faint);padding:26px;">Aucun protocole actif.</td></tr>`}
+        </tbody>
+      </table></div>
+    </div>
+    <div style="margin-top:14px;font-size:11.5px;color:var(--text-faint);">Pour activer le protocole d'un nouveau client, utilise le menu ⋯ depuis la page Clients.</div>`;
 }
 
 function renderDashboard(el){
