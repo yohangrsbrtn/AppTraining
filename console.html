@@ -422,12 +422,13 @@ function filteredSortedClients(){
 
 // ── Chargement des données réelles ────────────────────────────────────
 async function chargerDonnees(){
-  const [clients, bilansCoach, logsRes, aValider] = await Promise.all([
+  const [clientsRaw, bilansCoach, logsRes, aValider] = await Promise.all([
     api('listerClientsAvecNiveaux').catch(()=>[]),
     api('listerBilansCoach').catch(()=>[]),
     api('chargerTousLesLogs').catch(()=>({logs:[]})),
     api('listerAlimentsCommunauteAValider').catch(()=>[]),
   ]);
+  const clients = typeof clientsRaw === 'string' ? JSON.parse(clientsRaw) : clientsRaw;
   const retards = await Promise.all(
     clients.map(c => apiAs('verifierRetardBilan', c.id).catch(()=>({enRetard:false})))
   );
