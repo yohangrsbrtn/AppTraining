@@ -1350,10 +1350,16 @@ function goTo(page) {
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 
 if (S.token && S.client) {
-  const _viewAsParam = new URLSearchParams(window.location.search).get('viewAs');
+  const _urlParams = new URLSearchParams(window.location.search);
+  const _viewAsParam = _urlParams.get('viewAs');
+  const _forceMobile = _urlParams.get('mobile');
   if (_viewAsParam && S.isCoach) {
     history.replaceState(null, '', window.location.pathname);
     enterVueClient(_viewAsParam);
+  } else if (S.isCoach && !_forceMobile && window.innerWidth >= 900) {
+    // Coach sur grand écran → la console desktop est plus adaptée que l'appli mobile.
+    // ?mobile=1 (utilisé par "Retour à l'app" depuis console.html) contourne cette redirection.
+    window.location.replace('console.html');
   } else {
     loadHome();
   }
