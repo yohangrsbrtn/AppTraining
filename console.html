@@ -230,7 +230,19 @@
   .panel-stat { background: var(--surface-2); border-radius: var(--radius-sm); padding: 9px 10px; }
   .panel-stat .l { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-faint); font-weight: 700; }
   .panel-stat .v { font-family: var(--font-mono); font-size: 15px; font-weight: 700; margin-top: 2px; }
+  .panel-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--hairline); padding: 0 20px; }
+  .panel-tab { border: none; background: none; padding: 9px 4px; margin-right: 16px; font-size: 12px; font-weight: 600; color: var(--text-faint); cursor: pointer; border-bottom: 2px solid transparent; }
+  .panel-tab:hover { color: var(--text); }
+  .panel-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
   .panel-body { padding: 16px 20px; overflow-y: auto; flex: 1; }
+  .note-item { background: var(--surface-2); border-radius: var(--radius-sm); padding: 10px 12px; margin-bottom: 8px; }
+  .note-item .txt { font-size: 12.5px; white-space: pre-wrap; }
+  .note-item .meta { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
+  .note-item .date { font-size: 10.5px; color: var(--text-faint); font-family: var(--font-mono); }
+  .note-item .del { border: none; background: none; color: var(--text-faint); cursor: pointer; font-size: 11px; }
+  .note-item .del:hover { color: var(--critical); }
+  .note-form textarea { width: 100%; background: var(--surface-2); border: 1px solid transparent; border-radius: var(--radius-sm); padding: 10px 12px; color: var(--text); font-size: 12.5px; font-family: inherit; resize: vertical; min-height: 64px; }
+  .note-form textarea:focus { border-color: var(--hairline); }
   .panel-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--hairline); font-size: 12.5px; }
   .panel-row:last-child { border-bottom: none; }
   .panel-row .l { color: var(--text-muted); }
@@ -376,6 +388,34 @@ const NAV = [
 
 let state = { nav:"dashboard", search:"", sortKey:"nom", sortDir:1, statusFilter:"all", selected:null };
 let data = { clients:[], bilansCoach:[], logs:[], aValider:[] };
+
+// ── Notes de coaching (Supabase) ──────────────────────────────────────
+const SUPABASE_URL = 'https://sfacjbwiczwkcjpwneyg.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNmYWNqYndpY3p3a2NqcHduZXlnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2MjgzNTAsImV4cCI6MjEwMDIwNDM1MH0.mrjPbOuQROMihzxZWrUNbncQIos0jK2VexpQDoRZXzY';
+function supaHeaders(extra){
+  return Object.assign({ apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + SUPABASE_ANON_KEY, 'Content-Type': 'application/json' }, extra || {});
+}
+async function chargerNotes(clientId){
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/notes_coach?client_id=eq.${encodeURIComponent(clientId)}&order=created_at.desc`, { headers: supaHeaders() });
+  if (!res.ok) throw new Error('supabase_' + res.status);
+  return res.json();
+}
+async function ajouterNote(clientId, contenu){
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/notes_coach`, {
+    method: 'POST', headers: supaHeaders({ Prefer: 'return=representation' }),
+    body: JSON.stringify({ client_id: clientId, contenu })
+  });
+  if (!res.ok) throw new Error('supabase_' + res.status);
+  return res.json();
+}
+async function supprimerNoteApi(id){
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/notes_coach?id=eq.${id}`, { method: 'DELETE', headers: supaHeaders() });
+  if (!res.ok) throw new Error('supabase_' + res.status);
+}
+function fmtDateNote(iso){
+  const d = new Date(iso);
+  return d.toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit', year:'numeric' }) + ' ' + d.toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' });
+}
 
 function renderSidebar(){
   const baseCount = data.aValider.length;
@@ -736,8 +776,12 @@ async function toggleVerrou(id, verrouille){
   catch(e) { alert('Erreur : ' + e.message); }
 }
 
-function openPanel(id){
+let panelTab = 'apercu';
+let panelNotes = null; // null = pas encore chargées
+async function openPanel(id){
   state.selected = id;
+  panelTab = 'apercu';
+  panelNotes = null;
   if (state.nav==='clients') renderTable();
   const c = data.clients.find(x=>x.id===id);
   if (!c) return;
@@ -750,6 +794,64 @@ function closePanel(){
   if (state.nav==='clients') renderTable();
   document.getElementById('panel').classList.remove('open');
   document.getElementById('overlay').classList.remove('open');
+}
+
+async function setPanelTab(t){
+  panelTab = t;
+  document.querySelectorAll('.panel-tab').forEach(b=>b.classList.toggle('active', b.dataset.tab===t));
+  const body = document.getElementById('panelBody');
+  const c = data.clients.find(x=>x.id===state.selected);
+  if (!c) return;
+  if (t === 'notes' && panelNotes === null) {
+    body.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-faint);">Chargement…</div>`;
+    try { panelNotes = await chargerNotes(c.id); } catch(e) { panelNotes = null; body.innerHTML = `<div class="empty-panel"><strong>Erreur</strong>${esc(e.message)}</div>`; return; }
+  }
+  body.innerHTML = panelTabContent(c, t);
+}
+
+function panelTabContent(c, t){
+  if (t === 'notes') return renderNotesTab();
+  return `
+    <div class="panel-row"><span class="l">Statut bilan</span><span class="chip ${c.enRetard?'late':'ok'}"><span class="dot"></span>${c.enRetard?'En retard':'À jour'}</span></div>
+    <div class="panel-row"><span class="l">Dernière connexion</span><span class="v mono" style="font-size:11px;">${esc(c.dernConnexion||'Jamais connecté')}</span></div>
+    <div class="panel-row"><span class="l">Accès feuille</span><span class="v">${c.verrouile ? '🔒 Verrouillé' : 'Libre'}</span></div>
+    <div class="panel-row"><span class="l">Protocole chimie</span><span class="v">${c.chimieActif ? 'Actif' : 'Inactif'}</span></div>`;
+}
+
+function renderNotesTab(){
+  const notes = panelNotes || [];
+  return `
+    <div class="note-form" style="margin-bottom:14px;">
+      <textarea id="noteInput" placeholder="Écrire une note privée sur ce client…"></textarea>
+      <button class="btn primary" style="margin-top:8px;width:100%;justify-content:center;" onclick="soumettreNote()">Ajouter la note</button>
+    </div>
+    ${notes.length ? notes.map(n => `
+      <div class="note-item">
+        <div class="txt">${esc(n.contenu)}</div>
+        <div class="meta"><span class="date">${fmtDateNote(n.created_at)}</span><button class="del" onclick="retirerNote(${n.id})">Supprimer</button></div>
+      </div>`).join('') : `<div class="empty-panel" style="padding:24px 12px;">Aucune note pour ce client.</div>`}`;
+}
+
+async function soumettreNote(){
+  const el = document.getElementById('noteInput');
+  const contenu = (el.value || '').trim();
+  if (!contenu) return;
+  const c = data.clients.find(x=>x.id===state.selected);
+  if (!c) return;
+  try {
+    await ajouterNote(c.id, contenu);
+    panelNotes = await chargerNotes(c.id);
+    document.getElementById('panelBody').innerHTML = renderNotesTab();
+  } catch(e) { alert('Erreur : ' + e.message); }
+}
+async function retirerNote(id){
+  const c = data.clients.find(x=>x.id===state.selected);
+  if (!c) return;
+  try {
+    await supprimerNoteApi(id);
+    panelNotes = await chargerNotes(c.id);
+    document.getElementById('panelBody').innerHTML = renderNotesTab();
+  } catch(e) { alert('Erreur : ' + e.message); }
 }
 
 function panelHTML(c){
@@ -767,12 +869,11 @@ function panelHTML(c){
         <div class="panel-stat"><div class="l">Chimie</div><div class="v" style="font-size:12px;">${c.chimieActif?'Actif':'Inactif'}</div></div>
       </div>
     </div>
-    <div class="panel-body">
-      <div class="panel-row"><span class="l">Statut bilan</span><span class="chip ${c.enRetard?'late':'ok'}"><span class="dot"></span>${c.enRetard?'En retard':'À jour'}</span></div>
-      <div class="panel-row"><span class="l">Dernière connexion</span><span class="v mono" style="font-size:11px;">${esc(c.dernConnexion||'Jamais connecté')}</span></div>
-      <div class="panel-row"><span class="l">Accès feuille</span><span class="v">${c.verrouile ? '🔒 Verrouillé' : 'Libre'}</span></div>
-      <div class="panel-row"><span class="l">Protocole chimie</span><span class="v">${c.chimieActif ? 'Actif' : 'Inactif'}</span></div>
+    <div class="panel-tabs">
+      <button class="panel-tab active" data-tab="apercu" onclick="setPanelTab('apercu')">Aperçu</button>
+      <button class="panel-tab" data-tab="notes" onclick="setPanelTab('notes')">Notes</button>
     </div>
+    <div class="panel-body" id="panelBody">${panelTabContent(c, 'apercu')}</div>
     <div class="panel-footer">
       <a class="btn primary" href="index.html?viewAs=${encodeURIComponent(c.id)}">Ouvrir en vue client</a>
     </div>`;
