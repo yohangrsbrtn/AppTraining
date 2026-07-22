@@ -676,7 +676,8 @@ function renderProtocolePage(el){
 }
 
 // ── Programmes : bibliothèque d'exercices + templates (Supabase) ──────────
-const GROUPES_MUSCULAIRES = ['Pectoraux','Dos','Épaules','Bras','Jambes','Abdominaux','Cardio','Full body'];
+const GROUPES_MUSCULAIRES = ['Pectoraux','Dos (dorsaux)','Dos (trapèzes)','Dos (global)','Epaules (anterieur)','Epaules (latéral)','Epaules (posterieur)','Biceps','Triceps','Abdos','Lombaires','Quadriceps','Ischios','Fessiers','Adducteurs','Abducteurs','Mollets','Cardio'];
+const BLOCS_META = { metabolique: 'Métabolique', mecanique: 'Mécanique', force: 'Force' };
 let progTab = 'exercices'; // 'exercices' | 'templates'
 let exercicesData = null;  // null = pas encore chargé
 let templatesData = null;
@@ -692,7 +693,10 @@ async function chargerExercices(){
 async function sauvegarderExercice(ex){
   const method = ex.id ? 'PATCH' : 'POST';
   const url = ex.id ? `${SUPABASE_URL}/rest/v1/exercices?id=eq.${ex.id}` : `${SUPABASE_URL}/rest/v1/exercices`;
-  const body = { nom: ex.nom, groupe_musculaire: ex.groupe_musculaire || null, equipement: ex.equipement || null, video_url: ex.video_url || null, notes: ex.notes || null };
+  const body = { nom: ex.nom, groupe_musculaire: ex.groupe_musculaire || null, groupe_secondaire: ex.groupe_secondaire || null, equipement: ex.equipement || null, video_url: ex.video_url || null, notes: ex.notes || null,
+    reps_metabolique: ex.reps_metabolique || null, repos_metabolique: ex.repos_metabolique || null,
+    reps_mecanique: ex.reps_mecanique || null, repos_mecanique: ex.repos_mecanique || null,
+    reps_force: ex.reps_force || null, repos_force: ex.repos_force || null };
   const res = await fetch(url, { method, headers: supaHeaders({ Prefer: 'return=representation' }), body: JSON.stringify(body) });
   if (!res.ok) throw new Error('supabase_' + res.status);
   return (await res.json())[0];
@@ -798,7 +802,8 @@ function renderExercicesSub(){
 }
 
 function ouvrirFormExercice(id){
-  const ex = id ? exercicesData.find(e => e.id === id) : { nom:'', groupe_musculaire:'', equipement:'', video_url:'', notes:'' };
+  const ex = id ? exercicesData.find(e => e.id === id) : { nom:'', groupe_musculaire:'', groupe_secondaire:'', equipement:'', video_url:'', notes:'',
+    reps_metabolique:'', repos_metabolique:'', reps_mecanique:'', repos_mecanique:'', reps_force:'', repos_force:'' };
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.id = 'modal-exercice';
@@ -807,14 +812,31 @@ function ouvrirFormExercice(id){
     <div class="modal-box">
       <h3>${id ? 'Modifier' : 'Nouvel'} exercice</h3>
       <div class="field-row"><label>Nom</label><input id="fExoNom" type="text" value="${esc(ex.nom)}" placeholder="ex: Développé couché"></div>
-      <div class="field-row"><label>Groupe musculaire</label>
-        <select id="fExoGroupe">
-          <option value="">—</option>
-          ${GROUPES_MUSCULAIRES.map(g => `<option value="${g}" ${ex.groupe_musculaire===g?'selected':''}>${g}</option>`).join('')}
-        </select>
+      <div class="field-grid">
+        <div class="field-row"><label>Groupe musculaire</label>
+          <select id="fExoGroupe">
+            <option value="">—</option>
+            ${GROUPES_MUSCULAIRES.map(g => `<option value="${g}" ${ex.groupe_musculaire===g?'selected':''}>${g}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field-row"><label>Groupe secondaire</label>
+          <select id="fExoGroupeSec">
+            <option value="">—</option>
+            ${GROUPES_MUSCULAIRES.map(g => `<option value="${g}" ${ex.groupe_secondaire===g?'selected':''}>${g}</option>`).join('')}
+          </select>
+        </div>
       </div>
       <div class="field-row"><label>Équipement</label><input id="fExoEquip" type="text" value="${esc(ex.equipement||'')}" placeholder="ex: Barre, haltères, machine…"></div>
       <div class="field-row"><label>Lien vidéo (YouTube, Instagram…)</label><input id="fExoVideo" type="text" value="${esc(ex.video_url||'')}" placeholder="https://…"></div>
+      <label style="font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.04em;display:block;margin:10px 0 4px;">Reps / repos par bloc</label>
+      <div class="field-grid" style="grid-template-columns:repeat(3,1fr);">
+        <div class="field-row"><label>Métabolique — reps</label><input id="fExoRepsMeta" type="text" value="${esc(ex.reps_metabolique||'')}" placeholder="15-20"></div>
+        <div class="field-row"><label>Mécanique — reps</label><input id="fExoRepsMeca" type="text" value="${esc(ex.reps_mecanique||'')}" placeholder="12-15"></div>
+        <div class="field-row"><label>Force — reps</label><input id="fExoRepsForce" type="text" value="${esc(ex.reps_force||'')}" placeholder="10-12"></div>
+        <div class="field-row"><label>Métabolique — repos</label><input id="fExoReposMeta" type="text" value="${esc(ex.repos_metabolique||'')}" placeholder="1'"></div>
+        <div class="field-row"><label>Mécanique — repos</label><input id="fExoReposMeca" type="text" value="${esc(ex.repos_mecanique||'')}" placeholder="1'30"></div>
+        <div class="field-row"><label>Force — repos</label><input id="fExoReposForce" type="text" value="${esc(ex.repos_force||'')}" placeholder="2'"></div>
+      </div>
       <div class="field-row"><label>Notes / consignes</label><textarea id="fExoNotes" rows="3">${esc(ex.notes||'')}</textarea></div>
       <div id="fExoErr" style="display:none;color:var(--critical);font-size:12px;margin-bottom:8px;"></div>
       <div class="modal-actions">
@@ -833,9 +855,16 @@ async function confirmerFormExercice(id){
     id: id || null,
     nom,
     groupe_musculaire: document.getElementById('fExoGroupe').value,
+    groupe_secondaire: document.getElementById('fExoGroupeSec').value,
     equipement: document.getElementById('fExoEquip').value.trim(),
     video_url: document.getElementById('fExoVideo').value.trim(),
     notes: document.getElementById('fExoNotes').value.trim(),
+    reps_metabolique: document.getElementById('fExoRepsMeta').value.trim(),
+    repos_metabolique: document.getElementById('fExoReposMeta').value.trim(),
+    reps_mecanique: document.getElementById('fExoRepsMeca').value.trim(),
+    repos_mecanique: document.getElementById('fExoReposMeca').value.trim(),
+    reps_force: document.getElementById('fExoRepsForce').value.trim(),
+    repos_force: document.getElementById('fExoReposForce').value.trim(),
   };
   try {
     const saved = await sauvegarderExercice(payload);
@@ -996,9 +1025,16 @@ function choisirExercicePourJour(exerciceId){
   overlay.className = 'modal-overlay';
   overlay.id = 'modal-dosage';
   overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+  const aDesBlocs = ex.reps_metabolique || ex.reps_mecanique || ex.reps_force;
   overlay.innerHTML = `
     <div class="modal-box">
       <h3>${esc(ex.nom)}</h3>
+      ${aDesBlocs ? `
+      <div class="field-row"><label>Préremplir depuis un bloc</label>
+        <div class="chip-filter">
+          ${Object.keys(BLOCS_META).map(b => ex['reps_'+b] ? `<button type="button" onclick='prefillDoseBloc(${JSON.stringify(b)}, ${JSON.stringify(ex)})'>${BLOCS_META[b]} · ${esc(ex['reps_'+b])} · ${esc(ex['repos_'+b]||'')}</button>` : '').join('')}
+        </div>
+      </div>` : ''}
       <div class="field-grid">
         <div class="field-row"><label>Séries</label><input id="fDoseSeries" type="text" inputmode="numeric" placeholder="3"></div>
         <div class="field-row"><label>Reps</label><input id="fDoseReps" type="text" placeholder="8-12"></div>
@@ -1011,6 +1047,10 @@ function choisirExercicePourJour(exerciceId){
       </div>
     </div>`;
   document.body.appendChild(overlay);
+}
+function prefillDoseBloc(bloc, ex){
+  document.getElementById('fDoseReps').value = ex['reps_'+bloc] || '';
+  document.getElementById('fDoseRepos').value = ex['repos_'+bloc] || '';
 }
 function confirmerAjoutExoJour(exerciceId){
   const ex = exercicesData.find(e => e.id === exerciceId);
