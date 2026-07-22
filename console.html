@@ -546,6 +546,7 @@ function renderMain(){
   if (state.nav === 'base') { renderBasePage(el); return; }
   if (state.nav === 'protocole') { renderProtocolePage(el); return; }
   if (state.nav === 'programmes') { renderProgrammesPage(el); return; }
+  if (state.nav === 'dietes') { renderDietesPage(el); return; }
   const label = NAV.flatMap(g=>g.items).find(i=>i.id===state.nav)?.label || '';
   el.innerHTML = `
     <div class="page-head"><div><div class="eyebrow">Console coach</div><h1>${label}</h1></div></div>
@@ -1166,6 +1167,392 @@ async function supprimerTemplateAction(id){
     await supprimerTemplate(id);
     templatesData = templatesData.filter(t => t.id !== id);
     renderTemplatesSub();
+  } catch(e) { alert(e.message); }
+}
+
+// ── Diètes : bibliothèque de templates (Supabase + base alimentaire GAS) ──
+let dietesData = null;
+let dieteEnEdition = null; // { id, nom, categorie, description, repas: [{ titre, aliments:[{nom, source, quantite_g, kcal_g, prot_g, glu_g, sucres_g, fibres_g, lip_g, ags_g}] }] }
+let dietePickerRepasIndex = null;
+let dietBaseAliments = null; // cache en mémoire, chargé une fois via l'action GAS chargerBaseAliments
+let pickerAlimentRecherche = '';
+let pickerAlimentSourceFiltre = 'all'; // 'all' | 'coach' | 'communaute'
+
+async function chargerDietesTemplates(){
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/diete_templates?order=nom.asc&select=*,diete_repas(id,diete_repas_aliments(id))`, { headers: supaHeaders() });
+  if (!res.ok) throw new Error('supabase_' + res.status);
+  return res.json();
+}
+async function chargerDieteArbo(templateId){
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/diete_repas?template_id=eq.${templateId}&order=ordre.asc&select=*,diete_repas_aliments(*)&diete_repas_aliments.order=ordre.asc`, { headers: supaHeaders() });
+  if (!res.ok) throw new Error('supabase_' + res.status);
+  return res.json();
+}
+async function sauvegarderDieteComplet(tpl){
+  const method = tpl.id ? 'PATCH' : 'POST';
+  const url = tpl.id ? `${SUPABASE_URL}/rest/v1/diete_templates?id=eq.${tpl.id}` : `${SUPABASE_URL}/rest/v1/diete_templates`;
+  const res = await fetch(url, { method, headers: supaHeaders({ Prefer: 'return=representation' }), body: JSON.stringify({ nom: tpl.nom, categorie: tpl.categorie || null, description: tpl.description || null }) });
+  if (!res.ok) throw new Error('supabase_' + res.status);
+  const saved = (await res.json())[0];
+  const templateId = saved.id;
+  if (tpl.id) {
+    await fetch(`${SUPABASE_URL}/rest/v1/diete_repas?template_id=eq.${templateId}`, { method: 'DELETE', headers: supaHeaders() });
+  }
+  const repasPayload = tpl.repas.map((r, ri) => ({ template_id: templateId, titre: r.titre || ('Repas ' + (ri+1)), ordre: ri }));
+  const resRepas = await fetch(`${SUPABASE_URL}/rest/v1/diete_repas`, { method: 'POST', headers: supaHeaders({ Prefer: 'return=representation' }), body: JSON.stringify(repasPayload) });
+  if (!resRepas.ok) throw new Error('supabase_' + resRepas.status);
+  const repasSaved = await resRepas.json();
+  const repasIdByOrdre = {};
+  repasSaved.forEach(r => { repasIdByOrdre[r.ordre] = r.id; });
+
+  const alimentsPayload = [];
+  tpl.repas.forEach((r, ri) => {
+    r.aliments.forEach((a, ai) => {
+      alimentsPayload.push({
+        repas_id: repasIdByOrdre[ri], ordre: ai, nom: a.nom, source: a.source || null,
+        quantite_g: parseFloat(a.quantite_g) || 0,
+        kcal_g: a.kcal_g, prot_g: a.prot_g, glu_g: a.glu_g, sucres_g: a.sucres_g, fibres_g: a.fibres_g, lip_g: a.lip_g, ags_g: a.ags_g,
+      });
+    });
+  });
+  if (alimentsPayload.length) {
+    const resAliments = await fetch(`${SUPABASE_URL}/rest/v1/diete_repas_aliments`, { method: 'POST', headers: supaHeaders({ Prefer: 'return=minimal' }), body: JSON.stringify(alimentsPayload) });
+    if (!resAliments.ok) throw new Error('supabase_' + resAliments.status);
+  }
+  return saved;
+}
+async function supprimerDieteTemplateApi(id){
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/diete_templates?id=eq.${id}`, { method: 'DELETE', headers: supaHeaders() });
+  if (!res.ok) throw new Error('supabase_' + res.status);
+}
+async function chargerBaseAlimentsCache(){
+  if (dietBaseAliments) return dietBaseAliments;
+  const data = await api('chargerBaseAliments');
+  const list = [...(data.coach||[]), ...(data.communaute||[])];
+  list.forEach((a,i) => { a._key = i; });
+  dietBaseAliments = list;
+  return list;
+}
+
+async function renderDietesPage(el){
+  el.innerHTML = `
+    <div class="page-head">
+      <div><div class="eyebrow">Console coach</div><h1>Diètes</h1></div>
+      <button class="btn primary" onclick="ouvrirEditeurDiete(null)">+ Nouveau template</button>
+    </div>
+    <div id="dietesListe"><div style="text-align:center;padding:30px;color:var(--text-faint);">Chargement…</div></div>`;
+  try {
+    if (dietesData === null) dietesData = await chargerDietesTemplates();
+    renderDietesListe();
+  } catch(e) {
+    document.getElementById('dietesListe').innerHTML = `<div class="empty-panel"><strong>Erreur de chargement</strong>${esc(e.message)}<br><br><button class="btn primary" onclick="renderDietesPage(document.getElementById('main'))" style="margin-top:10px;">Réessayer</button></div>`;
+  }
+}
+function renderDietesListe(){
+  const cont = document.getElementById('dietesListe');
+  cont.innerHTML = `
+    <div class="tpl-grid">
+      ${dietesData.map(t => {
+        const repasList = t.diete_repas || [];
+        const nbAliments = repasList.reduce((s,r)=>s+(r.diete_repas_aliments||[]).length,0);
+        return `
+        <div class="tpl-card" onclick="ouvrirEditeurDiete(${t.id})">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <div class="nom">${esc(t.nom)}</div>
+            <button class="icon-btn" style="width:24px;height:24px;flex-shrink:0;" onclick="event.stopPropagation();supprimerDieteTemplateAction(${t.id})">${iTrash()}</button>
+          </div>
+          ${t.categorie ? `<span class="chip off">${esc(t.categorie)}</span>` : ''}
+          <div class="meta" style="margin-top:8px;">${repasList.length} repas · ${nbAliments} aliment${nbAliments>1?'s':''}</div>
+        </div>`;}).join('') || `<div class="empty-panel">Aucun template. Crée le premier avec "+ Nouveau template".</div>`}
+    </div>`;
+}
+
+function repasVide(numero){ return { titre: 'Repas ' + numero, aliments: [] }; }
+
+async function ouvrirEditeurDiete(id){
+  if (id) {
+    const tpl = dietesData.find(t => t.id === id);
+    const repasRaw = await chargerDieteArbo(id);
+    dieteEnEdition = {
+      id: tpl.id, nom: tpl.nom, categorie: tpl.categorie || '', description: tpl.description || '',
+      repas: repasRaw.map(r => ({
+        titre: r.titre,
+        aliments: (r.diete_repas_aliments || []).map(a => ({
+          nom: a.nom, source: a.source, quantite_g: a.quantite_g,
+          kcal_g: a.kcal_g, prot_g: a.prot_g, glu_g: a.glu_g, sucres_g: a.sucres_g, fibres_g: a.fibres_g, lip_g: a.lip_g, ags_g: a.ags_g,
+        }))
+      }))
+    };
+    if (!dieteEnEdition.repas.length) dieteEnEdition.repas = [repasVide(1)];
+  } else {
+    dieteEnEdition = { id: null, nom: '', categorie: '', description: '', repas: [repasVide(1)] };
+  }
+  renderEditeurDiete();
+}
+
+function renderEditeurDiete(){
+  const el = document.getElementById('main');
+  const t = dieteEnEdition;
+  el.innerHTML = `
+    <div class="page-head">
+      <div><div class="eyebrow">Console coach</div><h1>${t.id ? 'Modifier' : 'Nouveau'} template de diète</h1></div>
+      <button class="btn" onclick="renderDietesPage(document.getElementById('main'))">‹ Retour</button>
+    </div>
+    <div class="table-card" style="padding:18px;margin-bottom:16px;">
+      <div class="field-grid" style="grid-template-columns:2fr 1fr;">
+        <div class="field-row" style="margin-bottom:0;"><label>Nom</label><input type="text" value="${esc(t.nom)}" placeholder="ex: Sèche — 2200 kcal" oninput="dieteEnEdition.nom=this.value"></div>
+        <div class="field-row" style="margin-bottom:0;"><label>Catégorie</label><input type="text" value="${esc(t.categorie)}" placeholder="ex: Sèche" oninput="dieteEnEdition.categorie=this.value"></div>
+      </div>
+      <div class="field-row" style="margin-top:12px;margin-bottom:0;"><label>Description</label><textarea rows="2" oninput="dieteEnEdition.description=this.value">${esc(t.description)}</textarea></div>
+    </div>
+    <div id="repasContainer"></div>
+    <button class="btn" style="width:100%;margin-bottom:16px;" onclick="ajouterRepasDiete()">+ Ajouter un repas</button>
+    <div class="table-card" style="padding:16px;margin-bottom:16px;">
+      <div style="font-weight:700;font-size:13px;margin-bottom:8px;">Total du jour</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;font-family:var(--font-mono);font-size:12.5px;color:var(--text-muted);">
+        <span><span id="tot-kcal">0</span> kcal</span>
+        <span>P <span id="tot-prot">0</span> g</span>
+        <span>G <span id="tot-glu">0</span> g</span>
+        <span>sucres <span id="tot-sucres">0</span> g</span>
+        <span>L <span id="tot-lip">0</span> g</span>
+      </div>
+    </div>
+    <div id="dieteErr" style="display:none;color:var(--critical);font-size:12px;margin-bottom:10px;"></div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn" style="flex:1;justify-content:center;" onclick="renderDietesPage(document.getElementById('main'))">Annuler</button>
+      <button class="btn primary" style="flex:1;justify-content:center;" onclick="confirmerSauvegardeDiete()">Enregistrer le template</button>
+    </div>`;
+  renderRepasDiete();
+}
+
+function renderRepasDiete(){
+  const cont = document.getElementById('repasContainer');
+  const t = dieteEnEdition;
+  cont.innerHTML = t.repas.map((repas, ri) => `
+    <div class="day-block" style="margin-bottom:18px;">
+      <div class="day-head">
+        <input type="text" value="${esc(repas.titre)}" oninput="dieteEnEdition.repas[${ri}].titre=this.value" placeholder="ex: Petit-déjeuner" style="flex:1;background:transparent;border:none;color:var(--text);font-size:13px;font-weight:700;padding:0;">
+        <button class="icon-btn del" onclick="retirerRepasDiete(${ri})">${iTrash()}</button>
+      </div>
+      ${repas.aliments.map((a, ai) => `
+        <div class="exo-row">
+          <span class="nom" title="${esc(a.nom)}">${esc(a.nom)} ${a.source ? `<span class="chip off" style="font-size:9px;padding:1px 5px;">${a.source==='coach'?'ma base':'communauté'}</span>` : ''}</span>
+          <div class="exo-champ"><label>Grammes</label><input type="text" inputmode="decimal" value="${esc(a.quantite_g)}" oninput="dieteEnEdition.repas[${ri}].aliments[${ai}].quantite_g=this.value;recalcMacrosAffichage()"></div>
+          <div class="exo-champ"><label>Kcal</label><span id="mac-kcal-${ri}-${ai}" style="font-family:var(--font-mono);font-size:12px;"></span></div>
+          <div class="exo-champ"><label>Prot</label><span id="mac-prot-${ri}-${ai}" style="font-family:var(--font-mono);font-size:12px;"></span></div>
+          <div class="exo-champ"><label>Gluc</label><span id="mac-glu-${ri}-${ai}" style="font-family:var(--font-mono);font-size:12px;"></span></div>
+          <div class="exo-champ"><label>Sucres</label><span id="mac-sucres-${ri}-${ai}" style="font-family:var(--font-mono);font-size:12px;"></span></div>
+          <div class="exo-champ"><label>Lip</label><span id="mac-lip-${ri}-${ai}" style="font-family:var(--font-mono);font-size:12px;"></span></div>
+          <button class="mini-btn" style="margin-left:auto;" onclick="retirerAlimentDeRepas(${ri},${ai})">✕</button>
+        </div>`).join('')}
+      <div style="padding:10px 16px;border-top:1px solid var(--hairline);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+        <button class="btn" onclick="ouvrirPickerAliment(${ri})">+ Ajouter un aliment</button>
+        <span class="stat">Sous-total : <span id="sub-kcal-${ri}"></span> kcal · P <span id="sub-prot-${ri}"></span> · G <span id="sub-glu-${ri}"></span> · sucres <span id="sub-sucres-${ri}"></span> · L <span id="sub-lip-${ri}"></span></span>
+      </div>
+    </div>`).join('');
+  recalcMacrosAffichage();
+}
+
+function setTxt(id, val){ const el = document.getElementById(id); if (el) el.textContent = val; }
+function recalcMacrosAffichage(){
+  const totJour = { kcal:0, prot:0, glu:0, sucres:0, lip:0 };
+  dieteEnEdition.repas.forEach((r, ri) => {
+    const totRepas = { kcal:0, prot:0, glu:0, sucres:0, lip:0 };
+    r.aliments.forEach((a, ai) => {
+      const q = parseFloat(a.quantite_g) || 0;
+      const kcal = (a.kcal_g||0)*q, prot = (a.prot_g||0)*q, glu = (a.glu_g||0)*q, lip = (a.lip_g||0)*q;
+      const sucres = a.sucres_g != null ? a.sucres_g*q : null;
+      setTxt(`mac-kcal-${ri}-${ai}`, Math.round(kcal));
+      setTxt(`mac-prot-${ri}-${ai}`, prot.toFixed(1));
+      setTxt(`mac-glu-${ri}-${ai}`, glu.toFixed(1));
+      setTxt(`mac-sucres-${ri}-${ai}`, sucres != null ? sucres.toFixed(1) : '—');
+      setTxt(`mac-lip-${ri}-${ai}`, lip.toFixed(1));
+      totRepas.kcal += kcal; totRepas.prot += prot; totRepas.glu += glu; totRepas.sucres += (sucres||0); totRepas.lip += lip;
+    });
+    setTxt(`sub-kcal-${ri}`, Math.round(totRepas.kcal));
+    setTxt(`sub-prot-${ri}`, totRepas.prot.toFixed(1));
+    setTxt(`sub-glu-${ri}`, totRepas.glu.toFixed(1));
+    setTxt(`sub-sucres-${ri}`, totRepas.sucres.toFixed(1));
+    setTxt(`sub-lip-${ri}`, totRepas.lip.toFixed(1));
+    totJour.kcal += totRepas.kcal; totJour.prot += totRepas.prot; totJour.glu += totRepas.glu; totJour.sucres += totRepas.sucres; totJour.lip += totRepas.lip;
+  });
+  setTxt('tot-kcal', Math.round(totJour.kcal));
+  setTxt('tot-prot', totJour.prot.toFixed(1));
+  setTxt('tot-glu', totJour.glu.toFixed(1));
+  setTxt('tot-sucres', totJour.sucres.toFixed(1));
+  setTxt('tot-lip', totJour.lip.toFixed(1));
+}
+
+function ajouterRepasDiete(){
+  dieteEnEdition.repas.push(repasVide(dieteEnEdition.repas.length+1));
+  renderRepasDiete();
+}
+function retirerRepasDiete(ri){
+  dieteEnEdition.repas.splice(ri,1);
+  renderRepasDiete();
+}
+function retirerAlimentDeRepas(ri, ai){
+  dieteEnEdition.repas[ri].aliments.splice(ai,1);
+  renderRepasDiete();
+}
+
+async function ouvrirPickerAliment(ri){
+  dietePickerRepasIndex = ri;
+  pickerAlimentRecherche = '';
+  pickerAlimentSourceFiltre = 'all';
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'modal-picker-aliment';
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+  overlay.innerHTML = `
+    <div class="modal-box">
+      <h3>Ajouter un aliment</h3>
+      <div class="field-row"><input type="text" id="pickerAlimentSearch" placeholder="Rechercher…" oninput="pickerAlimentRecherche=this.value;renderPickerAlimentsListe()"></div>
+      <div class="chip-filter" style="margin-bottom:10px;">
+        <button class="active" onclick="pickerAlimentSourceFiltre='all';renderPickerAlimentsListe()">Tous</button>
+        <button onclick="pickerAlimentSourceFiltre='coach';renderPickerAlimentsListe()">Ma base</button>
+        <button onclick="pickerAlimentSourceFiltre='communaute';renderPickerAlimentsListe()">Communauté</button>
+      </div>
+      <div id="pickerAlimentListe" style="max-height:260px;overflow-y:auto;"><div style="padding:16px;text-align:center;color:var(--text-faint);">Chargement…</div></div>
+      <div class="modal-actions">
+        <button class="btn" style="flex:1;" onclick="ouvrirFormNouvelAliment()">+ Créer un aliment</button>
+        <button class="btn" style="flex:1;" onclick="document.getElementById('modal-picker-aliment').remove()">Fermer</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  try { await chargerBaseAlimentsCache(); renderPickerAlimentsListe(); }
+  catch(e) { document.getElementById('pickerAlimentListe').innerHTML = `<div style="padding:16px;color:var(--critical);font-size:12px;">Erreur : ${esc(e.message)}</div>`; }
+}
+function renderPickerAlimentsListe(){
+  const chips = document.querySelector('#modal-picker-aliment .chip-filter');
+  if (chips) chips.innerHTML = `
+    <button class="${pickerAlimentSourceFiltre==='all'?'active':''}" onclick="pickerAlimentSourceFiltre='all';renderPickerAlimentsListe()">Tous</button>
+    <button class="${pickerAlimentSourceFiltre==='coach'?'active':''}" onclick="pickerAlimentSourceFiltre='coach';renderPickerAlimentsListe()">Ma base</button>
+    <button class="${pickerAlimentSourceFiltre==='communaute'?'active':''}" onclick="pickerAlimentSourceFiltre='communaute';renderPickerAlimentsListe()">Communauté</button>`;
+  const q = pickerAlimentRecherche.trim().toLowerCase();
+  let list = (dietBaseAliments || []);
+  if (pickerAlimentSourceFiltre !== 'all') list = list.filter(a => a.source === pickerAlimentSourceFiltre);
+  if (q) list = list.filter(a => a.nom.toLowerCase().includes(q));
+  list = list.slice().sort((a,b) => {
+    const aStarts = a.nom.toLowerCase().startsWith(q), bStarts = b.nom.toLowerCase().startsWith(q);
+    if (aStarts !== bStarts) return aStarts ? -1 : 1;
+    return a.nom.localeCompare(b.nom, 'fr');
+  }).slice(0, 30);
+  document.getElementById('pickerAlimentListe').innerHTML = list.map(a => `
+    <div class="exo-row" style="cursor:pointer;" onclick="ajouterAlimentARepas(${a._key})">
+      <span class="nom">${esc(a.nom)}</span>
+      <span class="stat">${a.source==='coach'?'Ma base':'Communauté'}${a.valide===false?' · non validé':''} · ${Math.round((a.kcal||0)*100)} kcal/100g</span>
+    </div>`).join('') || `<div style="padding:16px;text-align:center;color:var(--text-faint);">Aucun résultat.</div>`;
+}
+function ajouterAlimentARepas(key){
+  const a = dietBaseAliments.find(x => x._key === key);
+  dieteEnEdition.repas[dietePickerRepasIndex].aliments.push({
+    nom: a.nom, source: a.source, quantite_g: 100,
+    kcal_g: a.kcal, prot_g: a.prot, glu_g: a.glu, sucres_g: a.sucres, fibres_g: a.fibres, lip_g: a.lip, ags_g: a.ags,
+  });
+  document.getElementById('modal-picker-aliment').remove();
+  renderRepasDiete();
+}
+
+function ouvrirFormNouvelAliment(){
+  document.getElementById('modal-picker-aliment').remove();
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'modal-nouvel-aliment';
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+  overlay.innerHTML = `
+    <div class="modal-box">
+      <h3>Créer un aliment (valeurs pour 100g)</h3>
+      <div class="field-row"><label>Nom</label><input id="fAlimNom" type="text" placeholder="ex: Yaourt grec 0%"></div>
+      <div class="field-row"><label>Code-barres (optionnel)</label>
+        <div style="display:flex;gap:8px;">
+          <input id="fAlimCodeBarre" type="text" placeholder="ex: 3017620422003" style="flex:1;">
+          <button class="btn" type="button" onclick="rechercherOpenFoodFacts()">Chercher</button>
+        </div>
+      </div>
+      <div id="fAlimOffMsg" style="display:none;font-size:11.5px;color:var(--text-faint);margin:-4px 0 8px;"></div>
+      <div class="field-grid" style="grid-template-columns:repeat(4,1fr);">
+        <div class="field-row"><label>Kcal</label><input id="fAlimKcal" type="text" inputmode="decimal" placeholder="120"></div>
+        <div class="field-row"><label>Protéines</label><input id="fAlimProt" type="text" inputmode="decimal" placeholder="10"></div>
+        <div class="field-row"><label>Glucides</label><input id="fAlimGlu" type="text" inputmode="decimal" placeholder="8"></div>
+        <div class="field-row"><label>Sucres</label><input id="fAlimSucres" type="text" inputmode="decimal" placeholder="6"></div>
+        <div class="field-row"><label>Fibres</label><input id="fAlimFibres" type="text" inputmode="decimal" placeholder="0"></div>
+        <div class="field-row"><label>Lipides</label><input id="fAlimLip" type="text" inputmode="decimal" placeholder="3"></div>
+        <div class="field-row"><label>AGS</label><input id="fAlimAgs" type="text" inputmode="decimal" placeholder="1"></div>
+      </div>
+      <div id="fAlimErr" style="display:none;color:var(--critical);font-size:12px;margin-bottom:8px;"></div>
+      <div class="modal-actions">
+        <button class="btn" onclick="document.getElementById('modal-nouvel-aliment').remove()">Annuler</button>
+        <button class="btn primary" onclick="confirmerNouvelAliment()">Créer et ajouter</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+async function rechercherOpenFoodFacts(){
+  const code = document.getElementById('fAlimCodeBarre').value.trim();
+  const msgEl = document.getElementById('fAlimOffMsg');
+  if (!code) return;
+  msgEl.style.display = 'block'; msgEl.textContent = 'Recherche…';
+  try {
+    const res = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json?fields=product_name,nutriments`);
+    const data = await res.json();
+    if (!data.product) { msgEl.textContent = 'Aucun produit trouvé pour ce code-barres.'; return; }
+    const n = data.product.nutriments || {};
+    const nomEl = document.getElementById('fAlimNom');
+    if (data.product.product_name && !nomEl.value) nomEl.value = data.product.product_name;
+    const setIf = (id, v) => { if (v != null) document.getElementById(id).value = v; };
+    setIf('fAlimKcal', n['energy-kcal_100g']);
+    setIf('fAlimProt', n['proteins_100g']);
+    setIf('fAlimGlu', n['carbohydrates_100g']);
+    setIf('fAlimSucres', n['sugars_100g']);
+    setIf('fAlimFibres', n['fiber_100g']);
+    setIf('fAlimLip', n['fat_100g']);
+    setIf('fAlimAgs', n['saturated-fat_100g']);
+    msgEl.textContent = 'Trouvé sur Open Food Facts — vérifie les valeurs avant de créer.';
+  } catch(e) { msgEl.textContent = 'Erreur de recherche : ' + e.message; }
+}
+async function confirmerNouvelAliment(){
+  const nom = document.getElementById('fAlimNom').value.trim();
+  const errEl = document.getElementById('fAlimErr');
+  if (!nom) { errEl.textContent = 'Le nom est obligatoire.'; errEl.style.display = 'block'; return; }
+  const val = id => { const v = parseFloat(document.getElementById(id).value); return isNaN(v) ? 0 : v; };
+  const codeBarre = document.getElementById('fAlimCodeBarre').value.trim();
+  try {
+    const res = await api('ajouterAlimentCommunaute', {
+      nom,
+      kcal: val('fAlimKcal')/100, prot: val('fAlimProt')/100, glu: val('fAlimGlu')/100,
+      sucres: val('fAlimSucres')/100, fibres: val('fAlimFibres')/100, lip: val('fAlimLip')/100, ags: val('fAlimAgs')/100,
+      codeBarre: codeBarre || null,
+    });
+    if (!res.ok) throw new Error(res.erreur || 'erreur_creation_aliment');
+    const created = res.aliment;
+    created._key = (dietBaseAliments ? dietBaseAliments.length : 0);
+    if (!dietBaseAliments) dietBaseAliments = [];
+    dietBaseAliments.push(created);
+    dieteEnEdition.repas[dietePickerRepasIndex].aliments.push({
+      nom: created.nom, source: created.source, quantite_g: 100,
+      kcal_g: created.kcal, prot_g: created.prot, glu_g: created.glu, sucres_g: created.sucres, fibres_g: created.fibres, lip_g: created.lip, ags_g: created.ags,
+    });
+    document.getElementById('modal-nouvel-aliment').remove();
+    renderRepasDiete();
+  } catch(e) { errEl.textContent = 'Erreur : ' + e.message; errEl.style.display = 'block'; }
+}
+
+async function confirmerSauvegardeDiete(){
+  const errEl = document.getElementById('dieteErr');
+  if (!dieteEnEdition.nom.trim()) { errEl.textContent = 'Le nom du template est obligatoire.'; errEl.style.display = 'block'; return; }
+  try {
+    const saved = await sauvegarderDieteComplet(dieteEnEdition);
+    dietesData = null; // le compte imbriqué (repas/aliments) doit être rechargé depuis Supabase
+    renderDietesPage(document.getElementById('main'));
+  } catch(e) { errEl.textContent = 'Erreur : ' + e.message; errEl.style.display = 'block'; }
+}
+async function supprimerDieteTemplateAction(id){
+  if (!confirm('Supprimer ce template de diète ?')) return;
+  try {
+    await supprimerDieteTemplateApi(id);
+    dietesData = dietesData.filter(t => t.id !== id);
+    renderDietesListe();
   } catch(e) { alert(e.message); }
 }
 
