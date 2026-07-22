@@ -264,6 +264,11 @@
   .exo-row .stat { color: var(--text-muted); font-family: var(--font-mono); font-size: 11.5px; white-space: nowrap; }
   .exo-row .mini-btn { border: none; background: var(--surface-2); color: var(--text-muted); width: 22px; height: 22px; border-radius: 6px; cursor: pointer; font-size: 11px; }
   .exo-row .mini-btn:hover { color: var(--text); }
+  .exo-row { flex-wrap: wrap; }
+  .exo-champ { display: flex; flex-direction: column; gap: 2px; }
+  .exo-champ label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-faint); }
+  .exo-champ input { width: 58px; background: var(--surface-2); border: 1px solid transparent; border-radius: 6px; padding: 5px 7px; color: var(--text); font-size: 12px; font-family: inherit; box-sizing: border-box; }
+  .exo-champ input:focus { border-color: var(--hairline); }
   .tpl-card { background: var(--surface); border-radius: var(--radius); padding: 16px; cursor: pointer; box-shadow: var(--shadow-sm); }
   .tpl-card .nom { font-weight: 700; font-size: 14px; margin-bottom: 6px; }
   .tpl-card .meta { font-size: 11.5px; color: var(--text-faint); }
@@ -677,7 +682,6 @@ function renderProtocolePage(el){
 
 // ── Programmes : bibliothèque d'exercices + templates (Supabase) ──────────
 const GROUPES_MUSCULAIRES = ['Pectoraux','Dos (dorsaux)','Dos (trapèzes)','Dos (global)','Epaules (anterieur)','Epaules (latéral)','Epaules (posterieur)','Biceps','Triceps','Abdos','Lombaires','Quadriceps','Ischios','Fessiers','Adducteurs','Abducteurs','Mollets','Cardio'];
-const BLOCS_META = { metabolique: 'Métabolique', mecanique: 'Mécanique', force: 'Force' };
 let progTab = 'exercices'; // 'exercices' | 'templates'
 let exercicesData = null;  // null = pas encore chargé
 let templatesData = null;
@@ -762,7 +766,7 @@ async function sauvegarderTemplateComplet(tpl){
     b.seances.forEach((s, si) => {
       const seanceId = seanceIdByBlocOrdre[blocId + '|' + si];
       s.exercices.forEach((ex, ei) => {
-        exercicesPayload.push({ seance_id: seanceId, exercice_id: ex.exercice_id, ordre: ei, series: ex.series || null, reps: ex.reps || '', repos: ex.repos || '', tempo: ex.tempo || '', notes: ex.notes || '' });
+        exercicesPayload.push({ seance_id: seanceId, exercice_id: ex.exercice_id, ordre: ei, series: parseInt(ex.series) || null, reps: ex.reps || '', repos: ex.repos || '', tempo: ex.tempo || '', rir: ex.rir || '', notes: ex.notes || '' });
       });
     });
   });
@@ -965,7 +969,7 @@ async function ouvrirEditeurTemplate(id){
           titre: s.titre,
           exercices: (s.programme_seance_exercices || []).map(l => {
             const ex = exercicesData.find(e=>e.id===l.exercice_id);
-            return { exercice_id: l.exercice_id, nom: ex ? ex.nom : '(exercice supprimé)', series: l.series, reps: l.reps, repos: l.repos, tempo: l.tempo };
+            return { exercice_id: l.exercice_id, nom: ex ? ex.nom : '(exercice supprimé)', series: l.series, reps: l.reps, repos: l.repos, tempo: l.tempo, rir: l.rir };
           })
         }))
       }))
@@ -1025,9 +1029,13 @@ function renderBlocsTemplate(){
           </div>
           ${seance.exercices.map((ex, ei) => `
             <div class="exo-row">
-              <span class="nom">${esc(ex.nom)}</span>
-              <span class="stat">${ex.series||'—'}×${esc(ex.reps||'—')} · ${esc(ex.repos||'—')}</span>
-              <button class="mini-btn" onclick="retirerExoDeSeance(${bi},${si},${ei})">✕</button>
+              <span class="nom" style="flex-basis:100%;">${esc(ex.nom)}</span>
+              <div class="exo-champ"><label>Séries</label><input type="text" inputmode="numeric" value="${esc(ex.series||'')}" placeholder="3" oninput="tplEnEdition.blocs[${bi}].seances[${si}].exercices[${ei}].series=this.value"></div>
+              <div class="exo-champ"><label>Reps</label><input type="text" value="${esc(ex.reps||'')}" placeholder="8-12" oninput="tplEnEdition.blocs[${bi}].seances[${si}].exercices[${ei}].reps=this.value"></div>
+              <div class="exo-champ"><label>Repos</label><input type="text" value="${esc(ex.repos||'')}" placeholder="90s" oninput="tplEnEdition.blocs[${bi}].seances[${si}].exercices[${ei}].repos=this.value"></div>
+              <div class="exo-champ"><label>Tempo</label><input type="text" value="${esc(ex.tempo||'')}" placeholder="2010" oninput="tplEnEdition.blocs[${bi}].seances[${si}].exercices[${ei}].tempo=this.value"></div>
+              <div class="exo-champ"><label>RIR</label><input type="text" value="${esc(ex.rir||'')}" placeholder="1-2" oninput="tplEnEdition.blocs[${bi}].seances[${si}].exercices[${ei}].rir=this.value"></div>
+              <button class="mini-btn" style="margin-left:auto;align-self:center;" onclick="retirerExoDeSeance(${bi},${si},${ei})">✕</button>
             </div>`).join('')}
           <div style="padding:10px 16px;border-top:1px solid var(--hairline);">
             <button class="btn" style="width:100%;justify-content:center;" onclick="ouvrirPickerExercice(${bi},${si})">+ Ajouter un exercice</button>
@@ -1061,8 +1069,13 @@ function retirerExoDeSeance(bi, si, ei){
   renderBlocsTemplate();
 }
 
+let pickerGroupeFiltre = 'all';
+let pickerRecherche = '';
+
 function ouvrirPickerExercice(bi, si){
   tplPickerCible = { bi, si };
+  pickerGroupeFiltre = 'all';
+  pickerRecherche = '';
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.id = 'modal-picker';
@@ -1070,73 +1083,46 @@ function ouvrirPickerExercice(bi, si){
   overlay.innerHTML = `
     <div class="modal-box">
       <h3>Choisir un exercice</h3>
-      <div class="field-row"><input type="text" id="pickerSearch" placeholder="Rechercher…" oninput="renderPickerListe(this.value)"></div>
+      <div class="field-row"><input type="text" id="pickerSearch" placeholder="Rechercher…" oninput="pickerRecherche=this.value;renderPickerListe()"></div>
+      <div class="chip-filter" style="flex-wrap:wrap;margin-bottom:10px;">
+        <button class="${pickerGroupeFiltre==='all'?'active':''}" onclick="pickerGroupeFiltre='all';renderPickerListe()">Tous</button>
+        ${GROUPES_MUSCULAIRES.map(g => `<button class="${pickerGroupeFiltre===g?'active':''}" onclick="pickerGroupeFiltre='${g}';renderPickerListe()">${g}</button>`).join('')}
+      </div>
       <div id="pickerListe" style="max-height:280px;overflow-y:auto;"></div>
       <div class="modal-actions"><button class="btn" style="width:100%;" onclick="document.getElementById('modal-picker').remove()">Fermer</button></div>
     </div>`;
   document.body.appendChild(overlay);
-  renderPickerListe('');
+  renderPickerListe();
 }
-function renderPickerListe(q){
-  const list = (exercicesData||[]).filter(e => e.nom.toLowerCase().includes((q||'').toLowerCase()));
+function renderPickerListe(){
+  // Re-rendre tout le modal pour que les chips actifs restent en phase avec pickerGroupeFiltre,
+  // mais sans perdre le focus du champ recherche (on ne touche pas à sa valeur).
+  const chips = document.querySelector('#modal-picker .chip-filter');
+  if (chips) chips.innerHTML = `
+    <button class="${pickerGroupeFiltre==='all'?'active':''}" onclick="pickerGroupeFiltre='all';renderPickerListe()">Tous</button>
+    ${GROUPES_MUSCULAIRES.map(g => `<button class="${pickerGroupeFiltre===g?'active':''}" onclick="pickerGroupeFiltre='${g}';renderPickerListe()">${g}</button>`).join('')}`;
+  const list = (exercicesData||[])
+    .filter(e => pickerGroupeFiltre === 'all' || e.groupe_musculaire === pickerGroupeFiltre)
+    .filter(e => e.nom.toLowerCase().includes(pickerRecherche.toLowerCase()));
   document.getElementById('pickerListe').innerHTML = list.map(e => `
-    <div class="exo-row" style="cursor:pointer;" onclick="choisirExercicePourSeance(${e.id})">
+    <div class="exo-row" style="cursor:pointer;" onclick="ajouterExerciceASeance(${e.id})">
       <span class="nom">${esc(e.nom)}</span>
       <span class="stat">${esc(e.groupe_musculaire||'')}</span>
     </div>`).join('') || `<div style="padding:16px;text-align:center;color:var(--text-faint);">Aucun résultat.</div>`;
 }
-function choisirExercicePourSeance(exerciceId){
+function ajouterExerciceASeance(exerciceId){
   const ex = exercicesData.find(e => e.id === exerciceId);
-  document.getElementById('modal-picker').remove();
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay';
-  overlay.id = 'modal-dosage';
-  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
-  // Le bloc parent de la séance ciblée, si typé, passe en premier et se préremplit automatiquement.
-  const blocType = tplEnEdition.blocs[tplPickerCible.bi].type;
-  const blocsDisponibles = Object.keys(BLOCS_META).filter(b => ex['reps_'+b]);
-  if (blocType && blocsDisponibles.includes(blocType)) {
-    blocsDisponibles.splice(blocsDisponibles.indexOf(blocType), 1);
-    blocsDisponibles.unshift(blocType);
-  }
-  const prefReps = blocType && ex['reps_'+blocType] ? ex['reps_'+blocType] : '';
-  const prefRepos = blocType && ex['repos_'+blocType] ? ex['repos_'+blocType] : '';
-  overlay.innerHTML = `
-    <div class="modal-box">
-      <h3>${esc(ex.nom)}</h3>
-      ${blocsDisponibles.length ? `
-      <div class="field-row"><label>Préremplir depuis un bloc</label>
-        <div class="chip-filter">
-          ${blocsDisponibles.map(b => `<button type="button" class="${b===blocType?'active':''}" onclick='prefillDoseBloc(${JSON.stringify(b)}, ${JSON.stringify(ex)})'>${BLOCS_META[b]} · ${esc(ex['reps_'+b])} · ${esc(ex['repos_'+b]||'')}</button>`).join('')}
-        </div>
-      </div>` : ''}
-      <div class="field-grid">
-        <div class="field-row"><label>Séries</label><input id="fDoseSeries" type="text" inputmode="numeric" placeholder="3"></div>
-        <div class="field-row"><label>Reps</label><input id="fDoseReps" type="text" value="${esc(prefReps)}" placeholder="8-12"></div>
-        <div class="field-row"><label>Repos</label><input id="fDoseRepos" type="text" value="${esc(prefRepos)}" placeholder="90s"></div>
-        <div class="field-row"><label>Tempo</label><input id="fDoseTempo" type="text" placeholder="2010"></div>
-      </div>
-      <div class="modal-actions">
-        <button class="btn" onclick="document.getElementById('modal-dosage').remove()">Annuler</button>
-        <button class="btn primary" onclick="confirmerAjoutExoSeance(${exerciceId})">Ajouter</button>
-      </div>
-    </div>`;
-  document.body.appendChild(overlay);
-}
-function prefillDoseBloc(bloc, ex){
-  document.getElementById('fDoseReps').value = ex['reps_'+bloc] || '';
-  document.getElementById('fDoseRepos').value = ex['repos_'+bloc] || '';
-}
-function confirmerAjoutExoSeance(exerciceId){
-  const ex = exercicesData.find(e => e.id === exerciceId);
-  tplEnEdition.blocs[tplPickerCible.bi].seances[tplPickerCible.si].exercices.push({
+  const { bi, si } = tplPickerCible;
+  // Standard/générique (pas de bloc typé) : rien ne se préremplit, l'ajustement se fait à la main
+  // directement dans les colonnes de la séance. Bloc typé : reps/repos de l'exercice pour ce bloc.
+  const blocType = tplEnEdition.blocs[bi].type;
+  const reps = blocType && ex['reps_'+blocType] ? ex['reps_'+blocType] : '';
+  const repos = blocType && ex['repos_'+blocType] ? ex['repos_'+blocType] : '';
+  tplEnEdition.blocs[bi].seances[si].exercices.push({
     exercice_id: exerciceId, nom: ex.nom,
-    series: parseInt(document.getElementById('fDoseSeries').value) || null,
-    reps: document.getElementById('fDoseReps').value.trim(),
-    repos: document.getElementById('fDoseRepos').value.trim(),
-    tempo: document.getElementById('fDoseTempo').value.trim(),
+    series: null, reps, repos, tempo: '', rir: '',
   });
-  document.getElementById('modal-dosage').remove();
+  document.getElementById('modal-picker').remove();
   renderBlocsTemplate();
 }
 
