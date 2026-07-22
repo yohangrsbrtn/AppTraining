@@ -243,6 +243,31 @@
   .note-item .del:hover { color: var(--critical); }
   .note-form textarea { width: 100%; background: var(--surface-2); border: 1px solid transparent; border-radius: var(--radius-sm); padding: 10px 12px; color: var(--text); font-size: 12.5px; font-family: inherit; resize: vertical; min-height: 64px; }
   .note-form textarea:focus { border-color: var(--hairline); }
+  .field-row { margin-bottom: 12px; }
+  .field-row label { display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-faint); font-weight: 700; margin-bottom: 6px; }
+  .field-row input, .field-row select, .field-row textarea {
+    width: 100%; background: var(--surface-2); border: 1px solid transparent; border-radius: var(--radius-sm);
+    padding: 9px 11px; color: var(--text); font-size: 13px; font-family: inherit; box-sizing: border-box;
+  }
+  .field-row input:focus, .field-row select:focus, .field-row textarea:focus { border-color: var(--hairline); }
+  .field-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 200; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .modal-box { background: var(--surface); border-radius: var(--radius); padding: 22px; width: 100%; max-width: 460px; max-height: 86vh; overflow-y: auto; box-shadow: var(--shadow-lg); }
+  .modal-box h3 { margin: 0 0 16px; font-family: var(--font-display); font-size: 16px; }
+  .modal-actions { display: flex; gap: 8px; margin-top: 18px; }
+  .modal-actions .btn { flex: 1; justify-content: center; }
+  .day-block { background: var(--surface); border-radius: var(--radius); margin-bottom: 12px; overflow: hidden; }
+  .day-head { display: flex; align-items: center; gap: 8px; padding: 12px 16px; font-weight: 700; font-size: 13px; }
+  .day-head .del { margin-left: auto; }
+  .exo-row { display: flex; align-items: center; gap: 8px; padding: 9px 16px; border-top: 1px solid var(--hairline); font-size: 12.5px; }
+  .exo-row .nom { flex: 1; font-weight: 600; }
+  .exo-row .stat { color: var(--text-muted); font-family: var(--font-mono); font-size: 11.5px; white-space: nowrap; }
+  .exo-row .mini-btn { border: none; background: var(--surface-2); color: var(--text-muted); width: 22px; height: 22px; border-radius: 6px; cursor: pointer; font-size: 11px; }
+  .exo-row .mini-btn:hover { color: var(--text); }
+  .tpl-card { background: var(--surface); border-radius: var(--radius); padding: 16px; cursor: pointer; box-shadow: var(--shadow-sm); }
+  .tpl-card .nom { font-weight: 700; font-size: 14px; margin-bottom: 6px; }
+  .tpl-card .meta { font-size: 11.5px; color: var(--text-faint); }
+  .tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
   .panel-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--hairline); font-size: 12.5px; }
   .panel-row:last-child { border-bottom: none; }
   .panel-row .l { color: var(--text-muted); }
@@ -496,6 +521,7 @@ function renderMain(){
   if (state.nav === 'classement') { renderClassementPage(el); return; }
   if (state.nav === 'base') { renderBasePage(el); return; }
   if (state.nav === 'protocole') { renderProtocolePage(el); return; }
+  if (state.nav === 'programmes') { renderProgrammesPage(el); return; }
   const label = NAV.flatMap(g=>g.items).find(i=>i.id===state.nav)?.label || '';
   el.innerHTML = `
     <div class="page-head"><div><div class="eyebrow">Console coach</div><h1>${label}</h1></div></div>
@@ -630,6 +656,376 @@ function renderProtocolePage(el){
       </table></div>
     </div>
     <div style="margin-top:14px;font-size:11.5px;color:var(--text-faint);">Pour activer le protocole d'un nouveau client, utilise le menu ⋯ depuis la page Clients.</div>`;
+}
+
+// ── Programmes : bibliothèque d'exercices + templates (Supabase) ──────────
+const GROUPES_MUSCULAIRES = ['Pectoraux','Dos','Épaules','Bras','Jambes','Abdominaux','Cardio','Full body'];
+let progTab = 'exercices'; // 'exercices' | 'templates'
+let exercicesData = null;  // null = pas encore chargé
+let templatesData = null;
+let exoGroupeFiltre = 'all';
+let exoRecherche = '';
+let tplCategorieFiltre = 'all';
+
+async function chargerExercices(){
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/exercices?order=nom.asc`, { headers: supaHeaders() });
+  if (!res.ok) throw new Error('supabase_' + res.status);
+  return res.json();
+}
+async function sauvegarderExercice(ex){
+  const method = ex.id ? 'PATCH' : 'POST';
+  const url = ex.id ? `${SUPABASE_URL}/rest/v1/exercices?id=eq.${ex.id}` : `${SUPABASE_URL}/rest/v1/exercices`;
+  const body = { nom: ex.nom, groupe_musculaire: ex.groupe_musculaire || null, equipement: ex.equipement || null, video_url: ex.video_url || null, notes: ex.notes || null };
+  const res = await fetch(url, { method, headers: supaHeaders({ Prefer: 'return=representation' }), body: JSON.stringify(body) });
+  if (!res.ok) throw new Error('supabase_' + res.status);
+  return (await res.json())[0];
+}
+async function supprimerExercice(id){
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/exercices?id=eq.${id}`, { method: 'DELETE', headers: supaHeaders() });
+  if (!res.ok) {
+    if (res.status === 409) throw new Error("Cet exercice est utilisé dans un template — retire-le du template d'abord.");
+    throw new Error('supabase_' + res.status);
+  }
+}
+
+async function chargerTemplates(){
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/programme_templates?order=nom.asc`, { headers: supaHeaders() });
+  if (!res.ok) throw new Error('supabase_' + res.status);
+  return res.json();
+}
+async function chargerTemplateExercices(templateId){
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/programme_template_exercices?template_id=eq.${templateId}&order=jour.asc,ordre.asc`, { headers: supaHeaders() });
+  if (!res.ok) throw new Error('supabase_' + res.status);
+  return res.json();
+}
+async function sauvegarderTemplateComplet(tpl){
+  const method = tpl.id ? 'PATCH' : 'POST';
+  const url = tpl.id ? `${SUPABASE_URL}/rest/v1/programme_templates?id=eq.${tpl.id}` : `${SUPABASE_URL}/rest/v1/programme_templates`;
+  const res = await fetch(url, { method, headers: supaHeaders({ Prefer: 'return=representation' }), body: JSON.stringify({ nom: tpl.nom, categorie: tpl.categorie || null, description: tpl.description || null }) });
+  if (!res.ok) throw new Error('supabase_' + res.status);
+  const saved = (await res.json())[0];
+  const templateId = saved.id;
+  if (tpl.id) {
+    // Remplacement complet des lignes (comme modifierMenu côté GAS) plutôt qu'un diff fin.
+    await fetch(`${SUPABASE_URL}/rest/v1/programme_template_exercices?template_id=eq.${templateId}`, { method: 'DELETE', headers: supaHeaders() });
+  }
+  const lignes = [];
+  tpl.jours.forEach(jour => {
+    jour.exercices.forEach((ex, idx) => {
+      lignes.push({ template_id: templateId, exercice_id: ex.exercice_id, jour: jour.numero, ordre: idx, series: ex.series || null, reps: ex.reps || '', repos: ex.repos || '', tempo: ex.tempo || '', notes: ex.notes || '' });
+    });
+  });
+  if (lignes.length) {
+    const res2 = await fetch(`${SUPABASE_URL}/rest/v1/programme_template_exercices`, { method: 'POST', headers: supaHeaders({ Prefer: 'return=minimal' }), body: JSON.stringify(lignes) });
+    if (!res2.ok) throw new Error('supabase_' + res2.status);
+  }
+  return saved;
+}
+async function supprimerTemplate(id){
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/programme_templates?id=eq.${id}`, { method: 'DELETE', headers: supaHeaders() });
+  if (!res.ok) throw new Error('supabase_' + res.status);
+}
+
+async function renderProgrammesPage(el){
+  el.innerHTML = `
+    <div class="page-head"><div><div class="eyebrow">Console coach</div><h1>Programmes</h1></div></div>
+    <div class="chip-filter" style="margin-bottom:16px;">
+      <button class="${progTab==='exercices'?'active':''}" onclick="progTab='exercices';renderProgrammesPage(document.getElementById('main'))">Exercices</button>
+      <button class="${progTab==='templates'?'active':''}" onclick="progTab='templates';renderProgrammesPage(document.getElementById('main'))">Templates</button>
+    </div>
+    <div id="progrSub"><div style="text-align:center;padding:30px;color:var(--text-faint);">Chargement…</div></div>`;
+  try {
+    if (progTab === 'exercices') {
+      if (exercicesData === null) exercicesData = await chargerExercices();
+      renderExercicesSub();
+    } else {
+      if (templatesData === null) templatesData = await chargerTemplates();
+      renderTemplatesSub();
+    }
+  } catch(e) {
+    document.getElementById('progrSub').innerHTML = `<div class="empty-panel"><strong>Erreur de chargement</strong>${esc(e.message)}<br><br><button class="btn primary" onclick="renderProgrammesPage(document.getElementById('main'))" style="margin-top:10px;">Réessayer</button></div>`;
+  }
+}
+
+// ── Sous-onglet Exercices ──────────────────────────────────────────────
+function renderExercicesSub(){
+  const sub = document.getElementById('progrSub');
+  const list = (exercicesData || [])
+    .filter(e => exoGroupeFiltre === 'all' || e.groupe_musculaire === exoGroupeFiltre)
+    .filter(e => e.nom.toLowerCase().includes(exoRecherche.toLowerCase()));
+  sub.innerHTML = `
+    <div class="table-card">
+      <div class="table-toolbar">
+        <div class="title">${list.length} exercice${list.length>1?'s':''}</div>
+        <input type="text" placeholder="Rechercher…" value="${esc(exoRecherche)}" oninput="exoRecherche=this.value;renderExercicesSub()" style="background:var(--surface-2);border:1px solid transparent;border-radius:var(--radius-sm);padding:6px 10px;color:var(--text);font-size:12px;width:160px;">
+        <div class="chip-filter">
+          <button class="${exoGroupeFiltre==='all'?'active':''}" onclick="exoGroupeFiltre='all';renderExercicesSub()">Tous</button>
+          ${GROUPES_MUSCULAIRES.map(g => `<button class="${exoGroupeFiltre===g?'active':''}" onclick="exoGroupeFiltre='${g}';renderExercicesSub()">${g}</button>`).join('')}
+        </div>
+        <button class="btn primary" onclick="ouvrirFormExercice(null)">+ Nouvel exercice</button>
+      </div>
+      <div class="table-scroll"><table class="clients">
+        <thead><tr><th>Nom</th><th>Groupe</th><th>Équipement</th><th>Vidéo</th><th></th></tr></thead>
+        <tbody>
+          ${list.map(e => `
+            <tr onclick="ouvrirFormExercice(${e.id})">
+              <td style="font-weight:600;">${esc(e.nom)}</td>
+              <td>${e.groupe_musculaire ? `<span class="chip off">${esc(e.groupe_musculaire)}</span>` : '—'}</td>
+              <td class="mono" style="color:var(--text-faint);">${esc(e.equipement||'—')}</td>
+              <td>${e.video_url ? `<a href="${esc(e.video_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--accent);">▶ Voir</a>` : '—'}</td>
+              <td class="row-actions"><button class="icon-btn" onclick="event.stopPropagation();retirerExercice(${e.id})">${iTrash()}</button></td>
+            </tr>`).join('') || `<tr><td colspan="5" style="text-align:center;color:var(--text-faint);padding:26px;">Aucun exercice. Crée le premier avec "+ Nouvel exercice".</td></tr>`}
+        </tbody>
+      </table></div>
+    </div>`;
+}
+
+function ouvrirFormExercice(id){
+  const ex = id ? exercicesData.find(e => e.id === id) : { nom:'', groupe_musculaire:'', equipement:'', video_url:'', notes:'' };
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'modal-exercice';
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+  overlay.innerHTML = `
+    <div class="modal-box">
+      <h3>${id ? 'Modifier' : 'Nouvel'} exercice</h3>
+      <div class="field-row"><label>Nom</label><input id="fExoNom" type="text" value="${esc(ex.nom)}" placeholder="ex: Développé couché"></div>
+      <div class="field-row"><label>Groupe musculaire</label>
+        <select id="fExoGroupe">
+          <option value="">—</option>
+          ${GROUPES_MUSCULAIRES.map(g => `<option value="${g}" ${ex.groupe_musculaire===g?'selected':''}>${g}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field-row"><label>Équipement</label><input id="fExoEquip" type="text" value="${esc(ex.equipement||'')}" placeholder="ex: Barre, haltères, machine…"></div>
+      <div class="field-row"><label>Lien vidéo (YouTube, Instagram…)</label><input id="fExoVideo" type="text" value="${esc(ex.video_url||'')}" placeholder="https://…"></div>
+      <div class="field-row"><label>Notes / consignes</label><textarea id="fExoNotes" rows="3">${esc(ex.notes||'')}</textarea></div>
+      <div id="fExoErr" style="display:none;color:var(--critical);font-size:12px;margin-bottom:8px;"></div>
+      <div class="modal-actions">
+        <button class="btn" onclick="document.getElementById('modal-exercice').remove()">Annuler</button>
+        <button class="btn primary" onclick="confirmerFormExercice(${id||'null'})">Enregistrer</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+async function confirmerFormExercice(id){
+  const nom = document.getElementById('fExoNom').value.trim();
+  const errEl = document.getElementById('fExoErr');
+  if (!nom) { errEl.textContent = 'Le nom est obligatoire.'; errEl.style.display = 'block'; return; }
+  const payload = {
+    id: id || null,
+    nom,
+    groupe_musculaire: document.getElementById('fExoGroupe').value,
+    equipement: document.getElementById('fExoEquip').value.trim(),
+    video_url: document.getElementById('fExoVideo').value.trim(),
+    notes: document.getElementById('fExoNotes').value.trim(),
+  };
+  try {
+    const saved = await sauvegarderExercice(payload);
+    if (id) { const i = exercicesData.findIndex(e=>e.id===id); if (i>=0) exercicesData[i] = saved; }
+    else exercicesData.push(saved);
+    document.getElementById('modal-exercice').remove();
+    renderExercicesSub();
+  } catch(e) { errEl.textContent = 'Erreur : ' + e.message; errEl.style.display = 'block'; }
+}
+
+async function retirerExercice(id){
+  if (!confirm('Supprimer cet exercice ?')) return;
+  try {
+    await supprimerExercice(id);
+    exercicesData = exercicesData.filter(e => e.id !== id);
+    renderExercicesSub();
+  } catch(e) { alert(e.message); }
+}
+
+// ── Sous-onglet Templates ──────────────────────────────────────────────
+function renderTemplatesSub(){
+  const sub = document.getElementById('progrSub');
+  const categories = [...new Set((templatesData||[]).map(t=>t.categorie).filter(Boolean))];
+  const list = (templatesData || []).filter(t => tplCategorieFiltre === 'all' || t.categorie === tplCategorieFiltre);
+  sub.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+      <div class="chip-filter">
+        <button class="${tplCategorieFiltre==='all'?'active':''}" onclick="tplCategorieFiltre='all';renderTemplatesSub()">Tous</button>
+        ${categories.map(c => `<button class="${tplCategorieFiltre===c?'active':''}" onclick="tplCategorieFiltre='${esc(c)}';renderTemplatesSub()">${esc(c)}</button>`).join('')}
+      </div>
+      <button class="btn primary" style="margin-left:auto;" onclick="ouvrirEditeurTemplate(null)">+ Nouveau template</button>
+    </div>
+    <div class="tpl-grid">
+      ${list.map(t => `
+        <div class="tpl-card" onclick="ouvrirEditeurTemplate(${t.id})">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <div class="nom">${esc(t.nom)}</div>
+            <button class="icon-btn" style="width:24px;height:24px;flex-shrink:0;" onclick="event.stopPropagation();supprimerTemplateAction(${t.id})">${iTrash()}</button>
+          </div>
+          ${t.categorie ? `<span class="chip off">${esc(t.categorie)}</span>` : ''}
+          <div class="meta" style="margin-top:8px;">${esc(t.description||'')}</div>
+        </div>`).join('') || `<div class="empty-panel">Aucun template. Crée le premier avec "+ Nouveau template".</div>`}
+    </div>`;
+}
+
+let tplEnEdition = null; // { id, nom, categorie, description, jours: [{numero, exercices:[{exercice_id, nom, series, reps, repos, tempo}]}] }
+let tplPickerJour = null;
+
+async function ouvrirEditeurTemplate(id){
+  if (exercicesData === null) { try { exercicesData = await chargerExercices(); } catch(e) { exercicesData = []; } }
+  if (id) {
+    const tpl = templatesData.find(t => t.id === id);
+    const lignes = await chargerTemplateExercices(id);
+    const jourNums = [...new Set(lignes.map(l=>l.jour))].sort((a,b)=>a-b);
+    tplEnEdition = {
+      id: tpl.id, nom: tpl.nom, categorie: tpl.categorie || '', description: tpl.description || '',
+      jours: (jourNums.length ? jourNums : [1]).map(n => ({
+        numero: n,
+        exercices: lignes.filter(l=>l.jour===n).map(l => {
+          const ex = exercicesData.find(e=>e.id===l.exercice_id);
+          return { exercice_id: l.exercice_id, nom: ex ? ex.nom : '(exercice supprimé)', series: l.series, reps: l.reps, repos: l.repos, tempo: l.tempo };
+        })
+      }))
+    };
+  } else {
+    tplEnEdition = { id: null, nom: '', categorie: '', description: '', jours: [{ numero: 1, exercices: [] }] };
+  }
+  renderEditeurTemplate();
+}
+
+function renderEditeurTemplate(){
+  const el = document.getElementById('main');
+  const t = tplEnEdition;
+  el.innerHTML = `
+    <div class="page-head">
+      <div><div class="eyebrow">Console coach</div><h1>${t.id ? 'Modifier' : 'Nouveau'} template</h1></div>
+      <button class="btn" onclick="progTab='templates';renderProgrammesPage(document.getElementById('main'))">‹ Retour</button>
+    </div>
+    <div class="table-card" style="padding:18px;margin-bottom:16px;">
+      <div class="field-grid" style="grid-template-columns:2fr 1fr;">
+        <div class="field-row" style="margin-bottom:0;"><label>Nom</label><input id="fTplNom" type="text" value="${esc(t.nom)}" placeholder="ex: Prise de masse — Bloc 1" oninput="tplEnEdition.nom=this.value"></div>
+        <div class="field-row" style="margin-bottom:0;"><label>Catégorie</label><input id="fTplCat" type="text" value="${esc(t.categorie)}" placeholder="ex: Prise de masse" oninput="tplEnEdition.categorie=this.value"></div>
+      </div>
+      <div class="field-row" style="margin-top:12px;margin-bottom:0;"><label>Description</label><textarea id="fTplDesc" rows="2" oninput="tplEnEdition.description=this.value">${esc(t.description)}</textarea></div>
+    </div>
+    <div id="joursContainer"></div>
+    <button class="btn" style="width:100%;margin-bottom:16px;" onclick="ajouterJourTemplate()">+ Ajouter un jour</button>
+    <div id="tplErr" style="display:none;color:var(--critical);font-size:12px;margin-bottom:10px;"></div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn" style="flex:1;justify-content:center;" onclick="progTab='templates';renderProgrammesPage(document.getElementById('main'))">Annuler</button>
+      <button class="btn primary" style="flex:1;justify-content:center;" onclick="confirmerSauvegardeTemplate()">Enregistrer le template</button>
+    </div>`;
+  renderJoursTemplate();
+}
+
+function renderJoursTemplate(){
+  const cont = document.getElementById('joursContainer');
+  cont.innerHTML = tplEnEdition.jours.map((jour, ji) => `
+    <div class="day-block">
+      <div class="day-head">
+        Jour ${jour.numero}
+        <button class="icon-btn del" onclick="retirerJourTemplate(${ji})">${iTrash()}</button>
+      </div>
+      ${jour.exercices.map((ex, ei) => `
+        <div class="exo-row">
+          <span class="nom">${esc(ex.nom)}</span>
+          <span class="stat">${ex.series||'—'}×${esc(ex.reps||'—')} · ${esc(ex.repos||'—')}</span>
+          <button class="mini-btn" onclick="retirerExoDuJour(${ji},${ei})">✕</button>
+        </div>`).join('')}
+      <div style="padding:10px 16px;border-top:1px solid var(--hairline);">
+        <button class="btn" style="width:100%;justify-content:center;" onclick="ouvrirPickerExercice(${ji})">+ Ajouter un exercice</button>
+      </div>
+    </div>`).join('');
+}
+
+function ajouterJourTemplate(){
+  const nums = tplEnEdition.jours.map(j=>j.numero);
+  tplEnEdition.jours.push({ numero: (nums.length?Math.max(...nums):0)+1, exercices: [] });
+  renderJoursTemplate();
+}
+function retirerJourTemplate(ji){
+  tplEnEdition.jours.splice(ji,1);
+  renderJoursTemplate();
+}
+function retirerExoDuJour(ji, ei){
+  tplEnEdition.jours[ji].exercices.splice(ei,1);
+  renderJoursTemplate();
+}
+
+function ouvrirPickerExercice(ji){
+  tplPickerJour = ji;
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'modal-picker';
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+  overlay.innerHTML = `
+    <div class="modal-box">
+      <h3>Choisir un exercice</h3>
+      <div class="field-row"><input type="text" id="pickerSearch" placeholder="Rechercher…" oninput="renderPickerListe(this.value)"></div>
+      <div id="pickerListe" style="max-height:280px;overflow-y:auto;"></div>
+      <div class="modal-actions"><button class="btn" style="width:100%;" onclick="document.getElementById('modal-picker').remove()">Fermer</button></div>
+    </div>`;
+  document.body.appendChild(overlay);
+  renderPickerListe('');
+}
+function renderPickerListe(q){
+  const list = (exercicesData||[]).filter(e => e.nom.toLowerCase().includes((q||'').toLowerCase()));
+  document.getElementById('pickerListe').innerHTML = list.map(e => `
+    <div class="exo-row" style="cursor:pointer;" onclick="choisirExercicePourJour(${e.id})">
+      <span class="nom">${esc(e.nom)}</span>
+      <span class="stat">${esc(e.groupe_musculaire||'')}</span>
+    </div>`).join('') || `<div style="padding:16px;text-align:center;color:var(--text-faint);">Aucun résultat.</div>`;
+}
+function choisirExercicePourJour(exerciceId){
+  const ex = exercicesData.find(e => e.id === exerciceId);
+  document.getElementById('modal-picker').remove();
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'modal-dosage';
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+  overlay.innerHTML = `
+    <div class="modal-box">
+      <h3>${esc(ex.nom)}</h3>
+      <div class="field-grid">
+        <div class="field-row"><label>Séries</label><input id="fDoseSeries" type="text" inputmode="numeric" placeholder="3"></div>
+        <div class="field-row"><label>Reps</label><input id="fDoseReps" type="text" placeholder="8-12"></div>
+        <div class="field-row"><label>Repos</label><input id="fDoseRepos" type="text" placeholder="90s"></div>
+        <div class="field-row"><label>Tempo</label><input id="fDoseTempo" type="text" placeholder="2010"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" onclick="document.getElementById('modal-dosage').remove()">Annuler</button>
+        <button class="btn primary" onclick="confirmerAjoutExoJour(${exerciceId})">Ajouter</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+function confirmerAjoutExoJour(exerciceId){
+  const ex = exercicesData.find(e => e.id === exerciceId);
+  tplEnEdition.jours[tplPickerJour].exercices.push({
+    exercice_id: exerciceId, nom: ex.nom,
+    series: parseInt(document.getElementById('fDoseSeries').value) || null,
+    reps: document.getElementById('fDoseReps').value.trim(),
+    repos: document.getElementById('fDoseRepos').value.trim(),
+    tempo: document.getElementById('fDoseTempo').value.trim(),
+  });
+  document.getElementById('modal-dosage').remove();
+  renderJoursTemplate();
+}
+
+async function confirmerSauvegardeTemplate(){
+  const errEl = document.getElementById('tplErr');
+  if (!tplEnEdition.nom.trim()) { errEl.textContent = 'Le nom du template est obligatoire.'; errEl.style.display = 'block'; return; }
+  try {
+    const saved = await sauvegarderTemplateComplet(tplEnEdition);
+    if (tplEnEdition.id) { const i = templatesData.findIndex(t=>t.id===tplEnEdition.id); if (i>=0) templatesData[i] = saved; }
+    else templatesData.push(saved);
+    progTab = 'templates';
+    renderProgrammesPage(document.getElementById('main'));
+  } catch(e) { errEl.textContent = 'Erreur : ' + e.message; errEl.style.display = 'block'; }
+}
+async function supprimerTemplateAction(id){
+  if (!confirm('Supprimer ce template ?')) return;
+  try {
+    await supprimerTemplate(id);
+    templatesData = templatesData.filter(t => t.id !== id);
+    renderTemplatesSub();
+  } catch(e) { alert(e.message); }
 }
 
 function renderDashboard(el){
