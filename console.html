@@ -488,12 +488,27 @@ function filteredSortedClients(){
 
 // ── Chargement des données réelles ────────────────────────────────────
 async function chargerDonnees(){
-  const [clientsRaw, bilansCoach, logsRes, aValider] = await Promise.all([
-    api('listerClientsAvecNiveaux').catch(()=>[]),
-    api('listerBilansCoach').catch(()=>[]),
-    api('chargerTousLesLogs').catch(()=>({logs:[]})),
-    api('listerAlimentsCommunauteAValider').catch(()=>[]),
+  const raw = await Promise.all([
+    api('listerClientsAvecNiveaux').then(v=>({ok:true,v})).catch(e=>({ok:false,e})),
+    api('listerBilansCoach').then(v=>({ok:true,v})).catch(e=>({ok:false,e})),
+    api('chargerTousLesLogs').then(v=>({ok:true,v})).catch(e=>({ok:false,e})),
+    api('listerAlimentsCommunauteAValider').then(v=>({ok:true,v})).catch(e=>({ok:false,e})),
   ]);
+  // Un token périmé fait échouer les 4 appels d'un coup avec 'token_invalide' — sans cette
+  // détection, les .catch() ci-dessus le rendaient indiscernable d'un vrai "0 client" (accueil
+  // vide sans jamais redemander de connexion).
+  if (raw.some(r => !r.ok && r.e && r.e.message === 'token_invalide')) {
+    localStorage.removeItem('at_token');
+    localStorage.removeItem('at_coach');
+    localStorage.removeItem('at_client');
+    document.getElementById('shell').style.display = 'none';
+    document.getElementById('gate').style.display = 'flex';
+    throw new Error('session_expiree');
+  }
+  const clientsRaw = raw[0].ok ? raw[0].v : [];
+  const bilansCoach = raw[1].ok ? raw[1].v : [];
+  const logsRes = raw[2].ok ? raw[2].v : {logs:[]};
+  const aValider = raw[3].ok ? raw[3].v : [];
   const clients = (typeof clientsRaw === 'string' ? JSON.parse(clientsRaw) : clientsRaw).filter(c => c.id !== 'yohan');
   const retards = await Promise.all(
     clients.map(c => apiAs('verifierRetardBilan', c.id).catch(()=>({enRetard:false})))
@@ -509,6 +524,7 @@ async function rafraichir(){
     renderSidebar();
     renderMain();
   } catch(e) {
+    if (e.message === 'session_expiree') return; // gate déjà affichée par chargerDonnees()
     document.getElementById('main').innerHTML = `<div class="empty-panel"><strong>Erreur de chargement</strong>${esc(e.message)}<br><br><button class="btn primary" onclick="rafraichir()" style="margin-top:10px;">Réessayer</button></div>`;
   }
 }
@@ -1303,8 +1319,9 @@ function renderNotifMenu(){
 // ── Boot ───────────────────────────────────────────────────────────────
 (async function boot(){
   await rafraichir();
-  renderNotifMenu();
   document.getElementById('loading').style.display = 'none';
+  if (document.getElementById('gate').style.display === 'flex') return; // session expirée, gate déjà affichée
+  renderNotifMenu();
   document.getElementById('shell').style.display = 'grid';
 })();
 </script>
