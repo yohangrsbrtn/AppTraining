@@ -424,6 +424,7 @@ async function confirmerCreationMenu() {
   const nom = (document.getElementById('dMenuNom').value || '').trim();
   if (!nom) { showToast('Donne un nom au menu.', '#c0392b'); return; }
   if (!_dMenuDraft.aliments.length) { showToast('Ajoute au moins un aliment.', '#c0392b'); return; }
+  showLoadingOverlay('Enregistrement…');
   try {
     if (_dMenuDraft.menuIdEdition) {
       await api('modifierMenu', { menuId: _dMenuDraft.menuIdEdition, nom, aliments: _dMenuDraft.aliments });
@@ -433,8 +434,9 @@ async function confirmerCreationMenu() {
     _dMenus = await api('listerMenus');
     _dMenuDraft = null;
     _dMenuVue = 'liste';
+    hideLoadingOverlay();
     setPage('diete');
-  } catch(e) { showToast('Erreur : ' + e.message, '#c0392b'); }
+  } catch(e) { hideLoadingOverlay(); showToast('Erreur : ' + e.message, '#c0392b'); }
 }
 
 // ── Onglet "Mon journal" ─────────────────────────────────────────────────────
@@ -808,13 +810,11 @@ async function confirmerComposeJournal() {
   if (!_dMenuDraft.aliments.length) { showToast('Ajoute au moins un aliment.', '#c0392b'); return; }
   const slot = _dJournalSlotEnEdition;
   const nom = (document.getElementById('dComposeNom').value || '').trim() || ('Repas ' + slot + ' du ' + _dJournalDateOuverte);
+  showLoadingOverlay('Enregistrement…');
   try {
     if (_dMenuDraft.menuIdEdition) {
       const res = await api('modifierMenu', { menuId: _dMenuDraft.menuIdEdition, nom, aliments: _dMenuDraft.aliments });
-      if (!res || !res.ok) { showToast('Erreur lors de la modification.', '#c0392b'); return; }
-      // Le Label affiché dans le journal est une copie figée au moment de l'ajout — si le nom
-      // a changé, on rafraîchit la ligne du slot (slot explicite désormais, donc sûr de
-      // supprimer/réinsérer sans perdre sa position).
+      if (!res || !res.ok) { hideLoadingOverlay(); showToast('Erreur lors de la modification.', '#c0392b'); return; }
       const slotActuel = (_dJournal||[]).find(s => s.date === _dJournalDateOuverte && s.slot === slot && s.type === 'menu');
       if (slotActuel && slotActuel.label !== nom) {
         await api('supprimerSlotJournal', { ligne: slotActuel.ligne });
@@ -822,17 +822,18 @@ async function confirmerComposeJournal() {
       }
     } else {
       const res = await api('creerMenu', { nom, aliments: _dMenuDraft.aliments });
-      if (!res || !res.ok) { showToast('Erreur lors de la création.', '#c0392b'); return; }
+      if (!res || !res.ok) { hideLoadingOverlay(); showToast('Erreur lors de la création.', '#c0392b'); return; }
       const res2 = await api('ajouterSlotJournal', { date: _dJournalDateOuverte, slot, type: 'menu', ref: res.menuId, label: nom });
-      if (!res2 || !res2.ok) { showToast(res2 && res2.erreur === 'slot_deja_rempli' ? 'Ce repas est déjà rempli.' : 'Erreur.', '#c0392b'); return; }
+      if (!res2 || !res2.ok) { hideLoadingOverlay(); showToast(res2 && res2.erreur === 'slot_deja_rempli' ? 'Ce repas est déjà rempli.' : 'Erreur.', '#c0392b'); return; }
     }
     _dMenus = await api('listerMenus');
     _dJournal = await api('listerJournal');
     _dMenuDraft = null;
     _dJournalAjoutEtape = null;
     _dJournalSlotEnEdition = null;
+    hideLoadingOverlay();
     setPage('diete');
-  } catch(e) { showToast('Erreur : ' + e.message, '#c0392b'); }
+  } catch(e) { hideLoadingOverlay(); showToast('Erreur : ' + e.message, '#c0392b'); }
 }
 
 async function choisirDieteJournal(ligne, col, nom) {
@@ -893,7 +894,23 @@ async function ouvrirAjoutAliment() {
   _dModifIndex = null;
   if (!_dBaseAliments) {
     _afficherModalAjout(true);
-    try { _dBaseAliments = await api('chargerBaseAliments'); } catch(e) { _dBaseAliments = { coach: [], communaute: [] }; }
+    try { _dBaseAliments = await api('chargerBaseAliments'); }
+    catch(e) {
+      // Ne pas fallback sur une base vide — afficher l'erreur et laisser _dBaseAliments à null
+      // pour que la prochaine ouverture réessaie le chargement.
+      const modal = document.getElementById('modalAjoutAliment');
+      const sheet = modal && modal.querySelector('div');
+      if (sheet) sheet.innerHTML = `
+        <div style="width:36px;height:4px;background:#2d3142;border-radius:2px;margin:0 auto 20px;"></div>
+        <div style="text-align:center;padding:10px 0 20px;">
+          <div style="font-size:28px;margin-bottom:12px;">⚠️</div>
+          <div style="font-size:15px;color:#e8eaf0;margin-bottom:8px;">Erreur de chargement</div>
+          <div style="font-size:13px;color:#8892a4;margin-bottom:20px;">Vérifie ta connexion et réessaie.</div>
+          <button onclick="document.getElementById('modalAjoutAliment').remove();ouvrirAjoutAliment();" style="width:100%;padding:12px;background:linear-gradient(135deg,#a78bfa,#6d3fd6);border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:700;cursor:pointer;">Réessayer</button>
+          <button onclick="document.getElementById('modalAjoutAliment').remove();" style="width:100%;margin-top:8px;padding:12px;background:#2d3142;border:none;border-radius:12px;color:#8892a4;font-size:14px;cursor:pointer;">Fermer</button>
+        </div>`;
+      return;
+    }
   }
   _afficherModalAjout(false);
 }
@@ -1172,12 +1189,14 @@ async function confirmerCreationAliment() {
   if (!nom) { errEl.textContent = 'Entre un nom.'; errEl.style.display = 'block'; return; }
   if (kcal100 <= 0) { errEl.textContent = 'Entre au moins les calories.'; errEl.style.display = 'block'; return; }
   errEl.style.display = 'none';
+  showLoadingOverlay('Création en cours…');
   try {
     const res = await api('ajouterAlimentCommunaute', {
       nom, kcal: kcal100/100, prot: prot100/100, glu: glu100/100,
       sucres: sucres100/100, fibres: fibres100/100, lip: lip100/100, ags: ags100/100,
       codeBarre: _dCreationCodeBarre || ''
     });
+    hideLoadingOverlay();
     if (!res || !res.ok) { errEl.textContent = 'Erreur lors de la création.'; errEl.style.display = 'block'; return; }
     if (_dBaseAliments) _dBaseAliments.communaute.push(res.aliment);
     _dAjoutSelection = res.aliment;
@@ -1185,7 +1204,7 @@ async function confirmerCreationAliment() {
     _dCreationPrefill = null;
     _dCreationCodeBarre = null;
     _afficherModalAjout(false);
-  } catch(e) { errEl.textContent = 'Erreur : ' + e.message; errEl.style.display = 'block'; }
+  } catch(e) { hideLoadingOverlay(); errEl.textContent = 'Erreur : ' + e.message; errEl.style.display = 'block'; }
 }
 
 // Arrête proprement la caméra si un scan est en cours — sans ça le flux vidéo reste actif
