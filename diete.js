@@ -1084,8 +1084,13 @@ function _chargerLibScan() {
 function renderModalAjoutScan() {
   return `
     <div style="font-size:11px;font-weight:600;color:#555e7a;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;">Scanner un code-barres</div>
-    <div id="dScanViewport" style="width:100%;border-radius:12px;overflow:hidden;background:#000;min-height:260px;"></div>
-    <div style="font-size:12px;color:var(--muted);text-align:center;margin:12px 0;">Vise le code-barres du produit.</div>
+    <div id="dScanViewport" style="width:100%;border-radius:12px;overflow:hidden;background:#0f1117;min-height:260px;display:flex;align-items:center;justify-content:center;">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:20px;">
+        <div class="spin"></div>
+        <div style="font-size:13px;color:#8892a4;">Initialisation de la caméra…</div>
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--muted);text-align:center;margin:12px 0;">Centre le code-barres dans le cadre — le scan est automatique.</div>
     <button onclick="_dAjoutEtape='recherche';_afficherModalAjout(false);" style="width:100%;padding:12px;background:#2d3142;border:none;border-radius:12px;color:#8892a4;font-size:14px;cursor:pointer;">Annuler</button>`;
 }
 
@@ -1109,10 +1114,12 @@ async function onScanSuccess(codeBarre) {
   _arreterScan();
   const local = _tousLesAliments().find(a => a.codeBarre === codeBarre);
   if (local) { _dScanTraitementEnCours = false; selectionnerAliment(local.nom, local.source); return; }
-  _afficherModalAjout(true);
+  // Overlay avec message explicite pendant la recherche OpenFoodFacts (peut prendre plusieurs secondes)
+  showLoadingOverlay('Recherche du produit…');
   try {
     const res = await fetch('https://world.openfoodfacts.org/api/v2/product/' + encodeURIComponent(codeBarre) + '.json?fields=product_name,nutriments');
     const data = await res.json();
+    hideLoadingOverlay();
     if (data && data.status === 1 && data.product) {
       const n = data.product.nutriments || {};
       _dCreationPrefill = {
@@ -1133,6 +1140,7 @@ async function onScanSuccess(codeBarre) {
       ouvrirCreationAliment('');
     }
   } catch(e) {
+    hideLoadingOverlay();
     _dCreationPrefill = null;
     _dCreationCodeBarre = codeBarre;
     showToast('Erreur réseau, tu peux créer l\'aliment manuellement.', '#c0392b');
