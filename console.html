@@ -1776,10 +1776,41 @@ async function toggleVerrou(id, verrouille){
 
 let panelTab = 'apercu';
 let panelNotes = null; // null = pas encore chargées
+let panelProgramme = null; // null = pas encore chargé
+let panelDiete = null;
+
+async function chargerAssignation(clientId, type){
+  const table = type === 'programme' ? 'client_programmes' : 'client_dietes';
+  const select = type === 'programme'
+    ? '*,programme_templates(id,nom,categorie,programme_blocs(id,programme_seances(id)))'
+    : '*,diete_templates(id,nom,categorie,diete_repas(id,diete_repas_aliments(id,kcal_g,prot_g,glu_g,lip_g,quantite_g)))';
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?client_id=eq.${encodeURIComponent(clientId)}&select=${encodeURIComponent(select)}`, { headers: supaHeaders() });
+  if (!res.ok) throw new Error('supabase_' + res.status);
+  const rows = await res.json();
+  return rows[0] || null;
+}
+async function assignerTemplate(clientId, templateId, type){
+  const table = type === 'programme' ? 'client_programmes' : 'client_dietes';
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?on_conflict=client_id`, {
+    method: 'POST',
+    headers: supaHeaders({ Prefer: 'resolution=merge-duplicates,return=representation' }),
+    body: JSON.stringify({ client_id: clientId, template_id: templateId, assigned_at: new Date().toISOString() })
+  });
+  if (!res.ok) throw new Error('supabase_' + res.status);
+  return (await res.json())[0];
+}
+async function retirerAssignation(clientId, type){
+  const table = type === 'programme' ? 'client_programmes' : 'client_dietes';
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?client_id=eq.${encodeURIComponent(clientId)}`, { method: 'DELETE', headers: supaHeaders() });
+  if (!res.ok) throw new Error('supabase_' + res.status);
+}
+
 async function openPanel(id){
   state.selected = id;
   panelTab = 'apercu';
   panelNotes = null;
+  panelProgramme = null;
+  panelDiete = null;
   if (state.nav==='clients') renderTable();
   const c = data.clients.find(x=>x.id===id);
   if (!c) return;
@@ -1804,16 +1835,124 @@ async function setPanelTab(t){
     body.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-faint);">Chargement…</div>`;
     try { panelNotes = await chargerNotes(c.id); } catch(e) { panelNotes = null; body.innerHTML = `<div class="empty-panel"><strong>Erreur</strong>${esc(e.message)}</div>`; return; }
   }
+  if (t === 'programme' && panelProgramme === null) {
+    body.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-faint);">Chargement…</div>`;
+    try {
+      if (templatesData === null) templatesData = await chargerTemplates();
+      panelProgramme = await chargerAssignation(c.id, 'programme');
+    } catch(e) { body.innerHTML = `<div class="empty-panel"><strong>Erreur</strong>${esc(e.message)}</div>`; return; }
+  }
+  if (t === 'diete' && panelDiete === null) {
+    body.innerHTML = `<div style="text-align:center;padding:20px;color:var(--text-faint);">Chargement…</div>`;
+    try {
+      if (dietesData === null) dietesData = await chargerDietesTemplates();
+      panelDiete = await chargerAssignation(c.id, 'diete');
+    } catch(e) { body.innerHTML = `<div class="empty-panel"><strong>Erreur</strong>${esc(e.message)}</div>`; return; }
+  }
   body.innerHTML = panelTabContent(c, t);
 }
 
 function panelTabContent(c, t){
   if (t === 'notes') return renderNotesTab();
+  if (t === 'programme') return renderProgrammeTab(c);
+  if (t === 'diete') return renderDieteTabPanel(c);
   return `
     <div class="panel-row"><span class="l">Statut bilan</span><span class="chip ${c.enRetard?'late':'ok'}"><span class="dot"></span>${c.enRetard?'En retard':'À jour'}</span></div>
     <div class="panel-row"><span class="l">Dernière connexion</span><span class="v mono" style="font-size:11px;">${esc(c.dernConnexion||'Jamais connecté')}</span></div>
     <div class="panel-row"><span class="l">Accès feuille</span><span class="v">${c.verrouile ? '🔒 Verrouillé' : 'Libre'}</span></div>
     <div class="panel-row"><span class="l">Protocole chimie</span><span class="v">${c.chimieActif ? 'Actif' : 'Inactif'}</span></div>`;
+}
+
+function renderProgrammeTab(c){
+  const tpls = templatesData || [];
+  const actif = panelProgramme;
+  const tplActif = actif && actif.programme_templates;
+  let stats = '';
+  if (tplActif) {
+    const blocs = tplActif.programme_blocs || [];
+    const nbSeances = blocs.reduce((s,b)=>s+(b.programme_seances||[]).length,0);
+    stats = `<div style="font-size:12px;color:var(--text-faint);margin-top:2px;">${blocs.length} bloc${blocs.length>1?'s':''} · ${nbSeances} séance${nbSeances>1?'s':''}</div>`;
+  }
+  return `
+    <div style="padding:4px 0 12px;">
+      ${tplActif
+        ? `<div style="margin-bottom:14px;">
+            <div style="font-size:11px;color:var(--text-faint);margin-bottom:4px;">Programme actuel</div>
+            <div style="font-weight:700;font-size:13px;">${esc(tplActif.nom)}</div>
+            ${tplActif.categorie ? `<div><span class="chip off">${esc(tplActif.categorie)}</span></div>` : ''}
+            ${stats}
+          </div>`
+        : `<div style="font-size:12px;color:var(--text-faint);margin-bottom:14px;">Aucun programme assigné.</div>`}
+      <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:6px;">Assigner un template</label>
+      <select id="selectProgramme" style="width:100%;padding:8px 10px;background:var(--surface-2);border:1px solid var(--hairline);border-radius:var(--radius-sm);color:var(--text);font-size:13px;margin-bottom:10px;">
+        <option value="">— Aucun —</option>
+        ${tpls.map(t=>`<option value="${t.id}" ${tplActif && tplActif.id===t.id?'selected':''}>${esc(t.nom)}${t.categorie?' ('+t.categorie+')':''}</option>`).join('')}
+      </select>
+      <button class="btn primary" style="width:100%;justify-content:center;" onclick="sauvegarderAssignationProgramme('${c.id}')">Enregistrer</button>
+      ${tplActif ? `<button class="btn" style="width:100%;justify-content:center;margin-top:8px;" onclick="retirerAssignationPanel('${c.id}','programme')">Retirer le programme</button>` : ''}
+    </div>`;
+}
+
+function renderDieteTabPanel(c){
+  const tpls = dietesData || [];
+  const actif = panelDiete;
+  const tplActif = actif && actif.diete_templates;
+  let macros = '';
+  if (tplActif) {
+    const repas = tplActif.diete_repas || [];
+    let kcal=0, prot=0, glu=0, lip=0;
+    repas.forEach(r => (r.diete_repas_aliments||[]).forEach(a => {
+      const q = parseFloat(a.quantite_g)||0;
+      kcal += (a.kcal_g||0)*q; prot += (a.prot_g||0)*q; glu += (a.glu_g||0)*q; lip += (a.lip_g||0)*q;
+    }));
+    macros = `<div style="font-size:12px;color:var(--text-faint);margin-top:4px;">${Math.round(kcal)} kcal · P ${prot.toFixed(0)}g · G ${glu.toFixed(0)}g · L ${lip.toFixed(0)}g</div>`;
+  }
+  return `
+    <div style="padding:4px 0 12px;">
+      ${tplActif
+        ? `<div style="margin-bottom:14px;">
+            <div style="font-size:11px;color:var(--text-faint);margin-bottom:4px;">Diète actuelle</div>
+            <div style="font-weight:700;font-size:13px;">${esc(tplActif.nom)}</div>
+            ${tplActif.categorie ? `<div><span class="chip off">${esc(tplActif.categorie)}</span></div>` : ''}
+            ${macros}
+          </div>`
+        : `<div style="font-size:12px;color:var(--text-faint);margin-bottom:14px;">Aucune diète assignée.</div>`}
+      <label style="font-size:11px;color:var(--text-faint);display:block;margin-bottom:6px;">Assigner un template</label>
+      <select id="selectDiete" style="width:100%;padding:8px 10px;background:var(--surface-2);border:1px solid var(--hairline);border-radius:var(--radius-sm);color:var(--text);font-size:13px;margin-bottom:10px;">
+        <option value="">— Aucun —</option>
+        ${tpls.map(t=>`<option value="${t.id}" ${tplActif && tplActif.id===t.id?'selected':''}>${esc(t.nom)}${t.categorie?' ('+t.categorie+')':''}</option>`).join('')}
+      </select>
+      <button class="btn primary" style="width:100%;justify-content:center;" onclick="sauvegarderAssignationDiete('${c.id}')">Enregistrer</button>
+      ${tplActif ? `<button class="btn" style="width:100%;justify-content:center;margin-top:8px;" onclick="retirerAssignationPanel('${c.id}','diete')">Retirer la diète</button>` : ''}
+    </div>`;
+}
+
+async function sauvegarderAssignationProgramme(clientId){
+  const sel = document.getElementById('selectProgramme');
+  if (!sel) return;
+  const templateId = sel.value ? parseInt(sel.value) : null;
+  try {
+    if (!templateId) { await retirerAssignation(clientId, 'programme'); panelProgramme = null; }
+    else { await assignerTemplate(clientId, templateId, 'programme'); panelProgramme = await chargerAssignation(clientId, 'programme'); }
+    document.getElementById('panelBody').innerHTML = renderProgrammeTab(data.clients.find(x=>x.id===clientId));
+  } catch(e) { alert('Erreur : ' + e.message); }
+}
+async function sauvegarderAssignationDiete(clientId){
+  const sel = document.getElementById('selectDiete');
+  if (!sel) return;
+  const templateId = sel.value ? parseInt(sel.value) : null;
+  try {
+    if (!templateId) { await retirerAssignation(clientId, 'diete'); panelDiete = null; }
+    else { await assignerTemplate(clientId, templateId, 'diete'); panelDiete = await chargerAssignation(clientId, 'diete'); }
+    document.getElementById('panelBody').innerHTML = renderDieteTabPanel(data.clients.find(x=>x.id===clientId));
+  } catch(e) { alert('Erreur : ' + e.message); }
+}
+async function retirerAssignationPanel(clientId, type){
+  try {
+    await retirerAssignation(clientId, type);
+    if (type === 'programme') { panelProgramme = null; document.getElementById('panelBody').innerHTML = renderProgrammeTab(data.clients.find(x=>x.id===clientId)); }
+    else { panelDiete = null; document.getElementById('panelBody').innerHTML = renderDieteTabPanel(data.clients.find(x=>x.id===clientId)); }
+  } catch(e) { alert('Erreur : ' + e.message); }
 }
 
 function renderNotesTab(){
@@ -1869,6 +2008,8 @@ function panelHTML(c){
     </div>
     <div class="panel-tabs">
       <button class="panel-tab active" data-tab="apercu" onclick="setPanelTab('apercu')">Aperçu</button>
+      <button class="panel-tab" data-tab="programme" onclick="setPanelTab('programme')">Programme</button>
+      <button class="panel-tab" data-tab="diete" onclick="setPanelTab('diete')">Diète</button>
       <button class="panel-tab" data-tab="notes" onclick="setPanelTab('notes')">Notes</button>
     </div>
     <div class="panel-body" id="panelBody">${panelTabContent(c, 'apercu')}</div>
